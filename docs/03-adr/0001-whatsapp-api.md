@@ -1,8 +1,35 @@
 # ADR-0001 — API do WhatsApp
 
-**Status:** proposto (aguardando decisão da Raquel)
+**Status:** ACEITO (decisão do Matheus em 21/07)
 **Data:** 21/07/2026
 **Contexto do projeto:** [MVP Fase 1](../02-spec/mvp-fase-1.md)
+
+## Decisão final (21/07)
+
+**API oficial (WhatsApp Cloud API) com Coexistência**, conexão direta à Graph API (sem BSP de
+taxa fixa). Motivos:
+
+- **Coexistência** (recurso da Meta) permite manter o número no **app do WhatsApp da Raquel** E na
+  API ao mesmo tempo. Ela continua atendendo pelo app quando quiser; o bot atende pela API. Isso
+  derrubou o motivo que antes empurrava para a não-oficial.
+- **Mesmo número para tudo** (decisão do Matheus): sem número dedicado, nem agora nem depois. A
+  distinção lead novo x cliente já fechado é resolvida por **consulta ao banco** (telefone; e, para
+  número novo, por nome/data), não por número separado.
+- **Custo:** conversas iniciadas pelo cliente e respostas dentro da janela de 24h são **gratuitas**.
+  Só há custo em mensagens que a empresa inicia fora da janela (templates), essencialmente o
+  follow-up de lead sumido. Tarifas Brasil (confirmar na Meta): serviço grátis, utility R$ 0,0642,
+  marketing R$ 0,5895 por mensagem.
+- **Sem risco de banimento** (ao contrário da não-oficial), postura profissional e escalável.
+
+Consequências operacionais:
+- O **handoff não usa "não lida"** (a API oficial não tem isso) nem grupo de WhatsApp (a API oficial
+  não envia/recebe em grupos). Com a coexistência, a conversa aparece no app da Raquel, então o
+  alerta de handoff vai por **bot do Telegram** (chega no celular dela) e ela responde no app.
+- **No MVP não há painel** (ver ADR-0004, revisão de 21/07): a Raquel atende pelo próprio app.
+- Ressalva da coexistência: o número **não pode ser pareado no WhatsApp Web tradicional** ao mesmo tempo.
+- Migrar o número atual para a Cloud API o desconecta do app durante o onboarding (combinar a transição).
+
+O restante deste ADR registra o comparativo original que levou a esta decisão.
 
 ## Contexto
 

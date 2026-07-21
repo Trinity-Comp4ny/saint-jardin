@@ -24,8 +24,10 @@ Responsável técnico: **Matheus**.
 
 ## Estado atual
 
-Fase de descoberta concluída. Aguardando decisões pendentes da Raquel (ver seção
-"Decisões pendentes" na [spec do MVP](02-spec/mvp-fase-1.md)) antes de iniciar o desenvolvimento.
+Descoberta e arquitetura concluídas. **Fase 0 (fundação sem WhatsApp) implementada**: núcleo do
+agente rodando em sandbox com testes (ver [README](../README.md)). Decisões travadas em 21/07:
+API oficial + coexistência, mesmo número, identificação por banco, sem painel no MVP, persona "Raquel",
+preço só via PDF. Próximo: Fase 1 (canal WhatsApp em sandbox).
 
 ## Material original
 

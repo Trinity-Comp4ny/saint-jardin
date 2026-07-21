@@ -1,9 +1,28 @@
 # ADR-0004 — Arquitetura do sistema
 
-**Status:** proposto (recomendação do painel de arquitetura)
+**Status:** ACEITO com revisões (decisões do Matheus em 21/07)
 **Data:** 21/07/2026
 **Contexto do projeto:** [MVP Fase 1](../02-spec/mvp-fase-1.md)
 **Relacionado:** [ADR-0001](0001-whatsapp-api.md), [ADR-0002](0002-calendario-dedicado.md), [ADR-0003](0003-dados-estruturados-plataforma.md)
+
+## Revisão 21/07 (o que mudou na recomendação do painel)
+
+Decisões do Matheus depois do painel, que ajustam a arquitetura abaixo:
+
+1. **WhatsApp: API oficial + Coexistência** (ver ADR-0001). A Raquel mantém o número no app dela.
+2. **Mesmo número para tudo, sem número dedicado.** A distinção lead x cliente fechado é por
+   **consulta ao banco** (telefone; e por nome/data quando vem de número novo). Já implementado no
+   orquestrador (`buscarPorTelefone` / `buscarPorNomeOuData`).
+3. **Sem painel no MVP.** Como a coexistência faz a conversa aparecer no app da Raquel, no handoff ela
+   atende pelo próprio app. O **alerta vai por bot do Telegram**. O painel/CRM vira fase futura.
+4. **Handoff sem "não lida" e sem grupo de WhatsApp** (a API oficial não suporta). Alerta = Telegram.
+5. **Barateamento (LLM mínimo):** a máquina de estados envia os textos prontos **sem LLM**; o Claude
+   (**Haiku 4.5**) entra só para ler a mensagem (extrair dados, classificar intenção). Custo por
+   conversa em centavos. Sonnet fica opcional para redação futura.
+6. **Custo WhatsApp:** atendimento na janela de 24h é grátis; só follow-up (template) custa.
+
+O corpo abaixo é a recomendação original do painel; onde houver conflito, vale esta revisão.
+As tabelas `interface_raquel`/painel referem-se à fase futura, não ao MVP.
 
 ## Como esta decisão foi tomada
 
