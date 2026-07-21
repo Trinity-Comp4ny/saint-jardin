@@ -33,3 +33,27 @@ export interface ConversaRepository {
 export interface Notifier {
   alertarHandoff(conversa: Conversa, motivo: string): Promise<void>;
 }
+
+/** Idempotência: a Meta reentrega webhooks; evita processar a mesma msg 2x. */
+export interface EventStore {
+  jaVisto(messageId: string): Promise<boolean>;
+  marcar(messageId: string): Promise<void>;
+}
+
+export type TipoItemFila = 'texto' | 'audio';
+
+export interface ItemFila {
+  id: string;
+  telefone: string;
+  tipo: TipoItemFila;
+  /** texto da mensagem, ou o mediaId quando tipo === 'audio'. */
+  conteudo: string;
+  processarApos: string; // ISO; implementa o delay proposital (~1min)
+}
+
+/** Fila durável com delay (a resposta não é instantânea, para não parecer bot). */
+export interface Fila {
+  enfileirar(item: Omit<ItemFila, 'id'>): Promise<void>;
+  pegarVencidas(agoraISO: string, limite: number): Promise<ItemFila[]>;
+  marcarProcessado(id: string): Promise<void>;
+}

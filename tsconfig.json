@@ -3,15 +3,40 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "jsx": "preserve",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "types": ["node"],
-    "outDir": "dist"
+    "incremental": true,
+    "types": [
+      "node"
+    ],
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "outDir": "dist",
+    "allowJs": true,
+    "noEmit": true,
+    "isolatedModules": true
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test",
+    "app",
+    "next-env.d.ts",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

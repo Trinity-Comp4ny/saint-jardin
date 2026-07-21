@@ -24,10 +24,14 @@ Responsável técnico: **Matheus**.
 
 ## Estado atual
 
-Descoberta e arquitetura concluídas. **Fase 0 (fundação sem WhatsApp) implementada**: núcleo do
-agente rodando em sandbox com testes (ver [README](../README.md)). Decisões travadas em 21/07:
-API oficial + coexistência, mesmo número, identificação por banco, sem painel no MVP, persona "Raquel",
-preço só via PDF. Próximo: Fase 1 (canal WhatsApp em sandbox).
+Descoberta e arquitetura concluídas. **Fase 0 e Fase 1 implementadas** (ver [README](../README.md)):
+núcleo do agente em sandbox com testes, mais a camada de WhatsApp (webhook Cloud API, assinatura,
+fila com delay, transcrição Groq, alerta Telegram, repos Supabase). 27 testes verdes, build ok.
+Decisões travadas em 21/07: API oficial + coexistência, mesmo número, identificação por banco,
+sem painel no MVP, persona "Raquel", preço só via PDF.
+
+Falta o **setup externo** (projeto Supabase, número de teste da Meta, bucket de PDFs, deploy) para
+exercitar de ponta a ponta. Próximo depois disso: Fase 2 (watchdog, consentimento LGPD, go-live).
 
 ## Material original
 
