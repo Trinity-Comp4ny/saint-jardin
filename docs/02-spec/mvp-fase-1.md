@@ -74,7 +74,7 @@ Lead novo → [checa: número é cliente fechado?]
 
 ## 6. Persona e comportamento
 
-- **Nome único** a definir (hoje aparece "Raquel" e "Ana" — padronizar). Ver ADR-0003.
+- **Nome único: "Raquel"** (definido em 21/07; nos prints antigos aparecia "Ana" em um contato, padronizado).
 - Não revela em nenhum momento que é uma IA.
 - **Delay proposital** entre receber e responder (~1 min, com variação) para não parecer bot.
 - Tom da Raquel: cordial, "você", emoji pontual (☺️), sem formalidade excessiva.
@@ -109,32 +109,35 @@ WhatsApp (ADR-0001)
 
 - [ ] Lead novo recebe saudação + apresentação + PDF sem intervenção humana.
 - [ ] A IA pergunta e interpreta corretamente data, dia da semana e nº de convidados (inclusive por áudio).
-- [ ] Ramificação correta: evento normal x mini wedding; ano 2027 x 2028; PDF certo enviado.
-- [ ] Preço informado bate com a tabela oficial (nunca inventado).
+- [ ] Ramificação correta: evento normal x mini wedding; ano 2027 x 2028; **PDF certo enviado**.
+- [ ] A IA nunca fala/inventa preço (o preço está dentro do PDF).
 - [ ] Data ocupada → IA sugere alternativa próxima disponível.
 - [ ] Pedido de visita, negociação, ou pergunta fora do script → handoff notifica a Raquel.
 - [ ] Número de cliente já fechado nunca é atendido pela IA.
 - [ ] Respostas saem com delay (não instantâneas).
-- [ ] Persona consistente (um nome só, sem revelar IA).
+- [ ] Persona consistente ("Raquel", sem revelar IA).
 
-## 10. Decisões pendentes (bloqueiam o início)
+## 10. Decisões
 
-Levar para a Raquel antes de codar:
+### Já definidas (21/07)
+- **Persona:** "Raquel", passando por humana.
+- **Preço:** o agente **não fala preço**, só envia o PDF certo (2027 e 2028 são PDFs, ambos com valores).
+- **Ambiente de teste:** dá para testar sem número real (Sandbox local + test number da Meta). Ver ADR-0004.
+- **Arquitetura:** definida no [ADR-0004](../03-adr/0004-arquitetura.md) (Next.js + Supabase + Anthropic SDK
+  + WhatsApp Cloud API oficial).
 
-1. **Número de WhatsApp:** usar o mesmo que hoje recebe tudo (inclusive clientes fechados) ou um número
-   novo dedicado a leads? Impacta ADR-0001 e a regra 3. *Recomendação: número novo dedicado.*
-2. **API do WhatsApp:** oficial (Meta/BSP) x não-oficial. Ver ADR-0001. Impacta custo, risco e handoff.
-3. **Como notificar o handoff:** "não lida" não existe na API oficial. Definir canal (painel, grupo
-   interno, notificação). Ver ADR-0001.
-4. **Tabela de preços completa:** confirmar valores de 2028 (todos os pacotes) e de domingo/sexta.
-   Ver ADR-0003.
-5. **Texto do follow-up** de "leu e não respondeu" (a Raquel disse que já tem).
-6. **Nome único da persona.**
-7. Confirmar nº de funcionários por evento normal (prints citam 2 e 3 em contextos diferentes).
+### Pendentes (dependem da Raquel / do negócio)
+1. **Número de WhatsApp:** confirmar que será um número **novo dedicado a leads** (recomendação). Ver ADR-0001/0004.
+2. **Disclosure de automação:** quanto revelar que há automação (equilíbrio ToS/LGPD x ilusão de humano).
+   Decisão de negócio da Raquel. Ver ADR-0004.
+3. **Canal do alerta de handoff:** Telegram (recomendado) x template no WhatsApp pessoal dela. Validar qual ela abre.
+4. **Texto do follow-up** de "leu e não respondeu" (fase 3, ela disse que já tem).
+5. Confirmar nº de funcionários por evento normal (prints citam 2 e 3 em contextos diferentes).
 
 ## 11. Próximos passos
 
-1. Fechar as decisões pendentes com a Raquel.
-2. Montar a tabela de preços estruturada (fonte de verdade).
-3. Escolher a API do WhatsApp e provisionar o número.
+1. Confirmar as pendências de negócio acima com a Raquel.
+2. **Fase 0 (ADR-0004):** montar fundação sem WhatsApp (schema Supabase, máquina de estados com testes,
+   SandboxProvider + tela `/sandbox`, upload dos 4 PDFs). Fluxo ponta a ponta mockado.
+3. Provisionar a Cloud API com test number e seguir o roadmap do ADR-0004.
 4. Prototipar o agente com o calendário de teste do Matheus antes de conectar o dos clientes.

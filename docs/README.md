@@ -20,6 +20,7 @@ Responsável técnico: **Matheus**.
 - [ADR-0001 — API do WhatsApp](03-adr/0001-whatsapp-api.md)
 - [ADR-0002 — Calendário dedicado para disponibilidade](03-adr/0002-calendario-dedicado.md)
 - [ADR-0003 — Dados estruturados desde o dia 1](03-adr/0003-dados-estruturados-plataforma.md)
+- [ADR-0004 — Arquitetura do sistema](03-adr/0004-arquitetura.md)
 
 ## Estado atual
 
