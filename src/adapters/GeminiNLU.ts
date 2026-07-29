@@ -7,7 +7,9 @@ import { z } from 'zod';
 import type { NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
 
-const MODELO = 'gemini-2.0-flash';
+// Alias "-latest": aponta sempre para o flash estável mais recente, evitando
+// que o modelo seja descontinuado (versões pinadas antigas sofrem EOL).
+const MODELO = 'gemini-flash-latest';
 
 const schema = z.object({
   slots: z
