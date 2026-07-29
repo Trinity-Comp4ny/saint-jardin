@@ -8,6 +8,7 @@ import type {
   Calendario,
   ContatoRepository,
   ConversaRepository,
+  MensagemRepo,
   MessagingProvider,
   Notifier,
   NLU,
@@ -21,6 +22,8 @@ export interface Deps {
   messaging: MessagingProvider;
   notifier: Notifier;
   agora: () => string;
+  /** Log de auditoria (opcional): grava entrada e saídas por telefone. */
+  mensagens?: MensagemRepo;
 }
 
 export interface ResultadoProcessamento {
@@ -49,6 +52,8 @@ export async function processarMensagem(
   texto: string,
   deps: Deps,
 ): Promise<ResultadoProcessamento> {
+  await deps.mensagens?.registrar(telefone, 'entrada', 'texto', texto);
+
   const conversaAtual =
     (await deps.conversas.obter(telefone)) ?? novaConversa(telefone, deps.agora());
 
@@ -95,6 +100,14 @@ export async function processarMensagem(
   // 6. Efeitos colaterais.
   if (saidas.length > 0) {
     await deps.messaging.enviar(telefone, saidas);
+    for (const s of saidas) {
+      await deps.mensagens?.registrar(
+        telefone,
+        'saida',
+        s.tipo === 'pdf' ? 'pdf' : 'texto',
+        s.tipo === 'pdf' ? (s.pdf ?? '') : (s.texto ?? ''),
+      );
+    }
   }
   // conversaAtual nunca é 'handoff' aqui (guardado no topo), então basta olhar o novo estado.
   if (conversa.estado === 'handoff') {

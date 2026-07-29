@@ -15,6 +15,7 @@ import {
   SupabaseConversaRepo,
   SupabaseEventStore,
   SupabaseFila,
+  SupabaseMensagemRepo,
   criarSupabase,
 } from '../adapters/supabase';
 import { PDF_CATALOGO } from '../domain/pdfs';
@@ -108,6 +109,7 @@ export function montarProcessDeps(): ProcessAppDeps {
     calendario: new SupabaseCalendario(db),
     messaging,
     notifier: notifierLazy(),
+    mensagens: new SupabaseMensagemRepo(db),
     agora: () => new Date().toISOString(),
   };
 

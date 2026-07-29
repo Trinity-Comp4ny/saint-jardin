@@ -29,6 +29,19 @@ export interface ConversaRepository {
   salvar(conversa: Conversa): Promise<void>;
 }
 
+export type DirecaoMensagem = 'entrada' | 'saida';
+export type TipoMensagemLog = 'texto' | 'pdf' | 'audio';
+
+/** Log de auditoria das mensagens trocadas (histórico por telefone). */
+export interface MensagemRepo {
+  registrar(
+    telefone: string,
+    direcao: DirecaoMensagem,
+    tipo: TipoMensagemLog,
+    conteudo: string,
+  ): Promise<void>;
+}
+
 /** Avisa a Raquel que uma conversa precisa dela (Telegram/push em produção). */
 export interface Notifier {
   alertarHandoff(conversa: Conversa, motivo: string): Promise<void>;

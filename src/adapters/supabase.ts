@@ -5,9 +5,12 @@ import type {
   Calendario,
   ContatoRepository,
   ConversaRepository,
+  DirecaoMensagem,
   EventStore,
   Fila,
   ItemFila,
+  MensagemRepo,
+  TipoMensagemLog,
 } from '../ports';
 import type { Contato, Conversa, Slots, StatusContato } from '../domain/types';
 
@@ -66,6 +69,22 @@ export class SupabaseConversaRepo implements ConversaRepository {
       { onConflict: 'telefone' },
     );
     if (error) throw new Error(`salvar conversa: ${error.message}`);
+  }
+}
+
+export class SupabaseMensagemRepo implements MensagemRepo {
+  constructor(private readonly db: SupabaseClient) {}
+
+  async registrar(
+    telefone: string,
+    direcao: DirecaoMensagem,
+    tipo: TipoMensagemLog,
+    conteudo: string,
+  ): Promise<void> {
+    const { error } = await this.db
+      .from('mensagens')
+      .insert({ telefone, direcao, tipo, conteudo });
+    if (error) throw new Error(`registrar mensagem: ${error.message}`);
   }
 }
 
