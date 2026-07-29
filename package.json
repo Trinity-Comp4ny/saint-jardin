@@ -5,6 +5,9 @@
   "type": "module",
   "description": "Atendimento automatizado de noivas no WhatsApp para o Saint Jardin",
   "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "test": "vitest run",
     "test:watch": "vitest",
     "sandbox": "tsx src/sandbox/run.ts",
