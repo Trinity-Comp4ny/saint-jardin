@@ -1,5 +1,5 @@
 // NLU determinística baseada em palavras-chave. Serve para os testes (hermético,
-// sem API) e para o sandbox local. Em produção, usar AnthropicNLU.
+// sem API) e para o sandbox local. Em produção, usar GeminiNLU.
 
 import type { NLU } from '../ports';
 import type { Ano, Conversa, DiaSemana, EntradaNLU, Intencao, Slots } from '../domain/types';

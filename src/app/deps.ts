@@ -1,7 +1,7 @@
 // Raiz de composição: monta as dependências reais a partir do ambiente.
 // Um único lugar que conhece env + adapters concretos.
 
-import { AnthropicNLU } from '../adapters/AnthropicNLU';
+import { GeminiNLU } from '../adapters/GeminiNLU';
 import { GroqTranscriber, type Transcriber } from '../adapters/GroqTranscriber';
 import { TelegramNotifier } from '../adapters/TelegramNotifier';
 import { WhatsAppCloudProvider } from '../adapters/WhatsAppCloudProvider';
@@ -56,7 +56,7 @@ export function montarDeps(): AppDeps {
   const orquestrador: Deps = {
     contatos: new SupabaseContatoRepo(db),
     conversas: new SupabaseConversaRepo(db),
-    nlu: new AnthropicNLU(obrigatorio('ANTHROPIC_API_KEY')),
+    nlu: new GeminiNLU(obrigatorio('GEMINI_API_KEY')),
     calendario: new SupabaseCalendario(db),
     messaging,
     notifier: new TelegramNotifier({

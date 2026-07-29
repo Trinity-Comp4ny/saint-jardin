@@ -1,13 +1,13 @@
-// NLU de produção: usa Claude Haiku só para LER a mensagem do lead
+// NLU de produção: usa Gemini só para LER a mensagem do lead
 // (extrair dados e classificar intenção). A decisão do fluxo é da máquina de
-// estados, não do modelo. Barato e com prompt caching no system.
+// estados, não do modelo. Barato e com saída forçada em JSON.
 
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI } from '@google/genai';
 import { z } from 'zod';
 import type { NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
 
-const MODELO = 'claude-haiku-4-5-20251001';
+const MODELO = 'gemini-2.0-flash';
 
 const schema = z.object({
   slots: z
@@ -49,32 +49,30 @@ Extraia:
 
 Responda SOMENTE com o objeto JSON, sem texto ao redor.`;
 
-export class AnthropicNLU implements NLU {
-  private client: Anthropic;
+export class GeminiNLU implements NLU {
+  private client: GoogleGenAI;
 
-  constructor(apiKey = process.env.ANTHROPIC_API_KEY) {
-    if (!apiKey) throw new Error('ANTHROPIC_API_KEY ausente para AnthropicNLU');
-    this.client = new Anthropic({ apiKey });
+  constructor(apiKey = process.env.GEMINI_API_KEY) {
+    if (!apiKey) throw new Error('GEMINI_API_KEY ausente para GeminiNLU');
+    this.client = new GoogleGenAI({ apiKey });
   }
 
   async analisar(texto: string, conversa: Conversa): Promise<EntradaNLU> {
-    const resp = await this.client.messages.create({
+    const resp = await this.client.models.generateContent({
       model: MODELO,
-      max_tokens: 400,
-      system: [{ type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } }],
-      messages: [
-        {
-          role: 'user',
-          content:
-            `Estado atual da conversa: ${conversa.estado}.\n` +
-            `Dados já coletados: ${JSON.stringify(conversa.slots)}.\n` +
-            `Mensagem da noiva: "${texto}"`,
-        },
-      ],
+      contents:
+        `Estado atual da conversa: ${conversa.estado}.\n` +
+        `Dados já coletados: ${JSON.stringify(conversa.slots)}.\n` +
+        `Mensagem da noiva: "${texto}"`,
+      config: {
+        systemInstruction: SYSTEM,
+        responseMimeType: 'application/json',
+        temperature: 0,
+        maxOutputTokens: 400,
+      },
     });
 
-    const bloco = resp.content.find((c) => c.type === 'text');
-    const bruto = bloco && bloco.type === 'text' ? bloco.text : '{}';
+    const bruto = resp.text ?? '{}';
     const json = extrairJson(bruto);
     return schema.parse(json) as EntradaNLU;
   }
