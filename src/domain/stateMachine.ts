@@ -114,15 +114,33 @@ export function decidir(
   }
 
   switch (conversa.estado) {
-    case 'novo':
-      return {
-        conversa: { ...base, estado: 'aguardando_qualificacao' },
-        saidas: [
-          texto(MSG.apresentacao),
-          { tipo: 'pdf', pdf: 'apresentacao' },
-          texto(MSG.perguntaQualificadora),
-        ],
-      };
+    case 'novo': {
+      // O primeiro contato sempre apresenta o espaço (texto + PDF).
+      const apresentacao: MensagemSaida[] = [
+        texto(MSG.apresentacao),
+        { tipo: 'pdf', pdf: 'apresentacao' },
+      ];
+
+      const jaVeioAlgumDado =
+        slots.data !== undefined ||
+        slots.ano !== undefined ||
+        slots.diaSemana !== undefined ||
+        slots.preferenciaDia !== undefined ||
+        slots.convidados !== undefined;
+
+      // Nada de útil na 1ª mensagem: faz a pergunta qualificadora completa.
+      if (!jaVeioAlgumDado) {
+        return {
+          conversa: { ...base, estado: 'aguardando_qualificacao' },
+          saidas: [...apresentacao, texto(MSG.perguntaQualificadora)],
+        };
+      }
+
+      // A pessoa já adiantou informação (data, dia, convidados...): apresenta e
+      // já avança na qualificação com os dados que temos, sem repetir a pergunta.
+      const proximo = decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
+      return { conversa: proximo.conversa, saidas: [...apresentacao, ...proximo.saidas] };
+    }
 
     case 'aguardando_qualificacao': {
       const faltando: string[] = [];

@@ -42,6 +42,27 @@ describe('fluxo feliz - evento normal', () => {
     expect(r.saidas[1]?.pdf).toBe('apresentacao');
   });
 
+  it('no primeiro contato já aproveita dados completos e avança ao orçamento', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    // apresentação + PDF apresentação + orçamento + PDF proposta + convite
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto', 'pdf', 'texto']);
+    expect(r.saidas[1]?.pdf).toBe('apresentacao');
+    expect(r.saidas[3]?.pdf).toBe('proposta_2027');
+  });
+
+  it('no primeiro contato com dado parcial, apresenta e pergunta só o que falta', () => {
+    const r = decidir(conversaEm('novo'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    // não repete a pergunta qualificadora inteira: pede só o que falta (convidados)
+    expect(r.saidas[2]?.texto).toContain('convidados');
+  });
+
   it('pede dados que faltam quando só veio o dia', () => {
     const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
