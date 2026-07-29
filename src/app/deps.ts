@@ -19,7 +19,7 @@ import {
 } from '../adapters/supabase';
 import { PDF_CATALOGO } from '../domain/pdfs';
 import type { TipoPdf } from '../domain/types';
-import type { EventStore, Fila } from '../ports';
+import type { EventStore, Fila, Notifier } from '../ports';
 import type { Deps } from './orchestrator';
 
 function obrigatorio(nome: string): string {
@@ -35,6 +35,32 @@ function criarDb() {
     obrigatorio('SUPABASE_URL'),
     obrigatorio('SUPABASE_SERVICE_ROLE_KEY'),
   );
+}
+
+// Groq (áudio) e Telegram (handoff) são usados só em ramos específicos do fluxo.
+// Instanciamos de forma lazy: a env só é exigida quando o recurso é de fato usado,
+// não ao montar as deps. Assim texto sem handoff roda sem GROQ/TELEGRAM configurados.
+function transcriberLazy(whatsappToken: string): Transcriber {
+  let real: Transcriber | null = null;
+  return {
+    transcrever(mediaId) {
+      real ??= new GroqTranscriber({ groqApiKey: obrigatorio('GROQ_API_KEY'), whatsappToken });
+      return real.transcrever(mediaId);
+    },
+  };
+}
+
+function notifierLazy(): Notifier {
+  let real: Notifier | null = null;
+  return {
+    alertarHandoff(conversa, motivo) {
+      real ??= new TelegramNotifier({
+        botToken: obrigatorio('TELEGRAM_BOT_TOKEN'),
+        chatId: obrigatorio('TELEGRAM_CHAT_ID'),
+      });
+      return real.alertarHandoff(conversa, motivo);
+    },
+  };
 }
 
 /** Deps da ingestão do webhook: só dedup + fila. Valida apenas o Supabase. */
@@ -81,19 +107,13 @@ export function montarProcessDeps(): ProcessAppDeps {
     nlu: new GeminiNLU(obrigatorio('GEMINI_API_KEY')),
     calendario: new SupabaseCalendario(db),
     messaging,
-    notifier: new TelegramNotifier({
-      botToken: obrigatorio('TELEGRAM_BOT_TOKEN'),
-      chatId: obrigatorio('TELEGRAM_CHAT_ID'),
-    }),
+    notifier: notifierLazy(),
     agora: () => new Date().toISOString(),
   };
 
   return {
     orquestrador,
     fila: new SupabaseFila(db),
-    transcriber: new GroqTranscriber({
-      groqApiKey: obrigatorio('GROQ_API_KEY'),
-      whatsappToken,
-    }),
+    transcriber: transcriberLazy(whatsappToken),
   };
 }
