@@ -3,7 +3,7 @@
 
 import { NextResponse } from 'next/server';
 import { processarFila } from '../../../src/app/pipeline';
-import { montarDeps } from '../../../src/app/deps';
+import { montarProcessDeps } from '../../../src/app/deps';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -14,7 +14,7 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('forbidden', { status: 403 });
   }
 
-  const { fila, transcriber, orquestrador } = montarDeps();
+  const { fila, transcriber, orquestrador } = montarProcessDeps();
   const processados = await processarFila({ fila, transcriber, orquestrador });
 
   return NextResponse.json({ ok: true, processados });

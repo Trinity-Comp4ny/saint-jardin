@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import { assinaturaValida, verificarHandshake } from '../../../src/whatsapp/verifySignature';
 import { ingerirWebhook } from '../../../src/app/pipeline';
-import { montarDeps } from '../../../src/app/deps';
+import { montarIngestDeps } from '../../../src/app/deps';
 
 export const runtime = 'nodejs';
 
@@ -32,7 +32,7 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('invalid json', { status: 400 });
   }
 
-  const { eventos, fila } = montarDeps();
+  const { eventos, fila } = montarIngestDeps();
   const enfileiradas = await ingerirWebhook(body, {
     eventos,
     fila,

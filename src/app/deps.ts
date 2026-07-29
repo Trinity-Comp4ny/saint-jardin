@@ -1,5 +1,9 @@
 // Raiz de composição: monta as dependências reais a partir do ambiente.
 // Um único lugar que conhece env + adapters concretos.
+//
+// Duas fronteiras, dois conjuntos de deps (cada endpoint valida só o que usa):
+//   - ingestão (/api/whatsapp): apenas dedup + fila (Supabase).
+//   - processamento (/api/process): NLU, calendário, envio, transcrição, handoff.
 
 import { GeminiNLU } from '../adapters/GeminiNLU';
 import { GroqTranscriber, type Transcriber } from '../adapters/GroqTranscriber';
@@ -24,20 +28,38 @@ function obrigatorio(nome: string): string {
   return v;
 }
 
-export interface AppDeps {
-  orquestrador: Deps;
+const BUCKET_PDF = 'propostas';
+
+function criarDb() {
+  return criarSupabase(
+    obrigatorio('SUPABASE_URL'),
+    obrigatorio('SUPABASE_SERVICE_ROLE_KEY'),
+  );
+}
+
+/** Deps da ingestão do webhook: só dedup + fila. Valida apenas o Supabase. */
+export interface IngestAppDeps {
   eventos: EventStore;
+  fila: Fila;
+}
+
+export function montarIngestDeps(): IngestAppDeps {
+  const db = criarDb();
+  return {
+    eventos: new SupabaseEventStore(db),
+    fila: new SupabaseFila(db),
+  };
+}
+
+/** Deps do processamento: núcleo do agente + transcrição. Valida tudo que usa. */
+export interface ProcessAppDeps {
+  orquestrador: Deps;
   fila: Fila;
   transcriber: Transcriber;
 }
 
-const BUCKET_PDF = 'propostas';
-
-export function montarDeps(): AppDeps {
-  const db = criarSupabase(
-    obrigatorio('SUPABASE_URL'),
-    obrigatorio('SUPABASE_SERVICE_ROLE_KEY'),
-  );
+export function montarProcessDeps(): ProcessAppDeps {
+  const db = criarDb();
   const whatsappToken = obrigatorio('WHATSAPP_TOKEN');
 
   const messaging = new WhatsAppCloudProvider({
@@ -68,7 +90,6 @@ export function montarDeps(): AppDeps {
 
   return {
     orquestrador,
-    eventos: new SupabaseEventStore(db),
     fila: new SupabaseFila(db),
     transcriber: new GroqTranscriber({
       groqApiKey: obrigatorio('GROQ_API_KEY'),
