@@ -35,11 +35,11 @@ describe('regras de negócio', () => {
 });
 
 describe('fluxo feliz - evento normal', () => {
-  it('no primeiro contato saúda, apresenta, manda PDF e pergunta', () => {
+  it('no primeiro contato apresenta, manda PDF e pergunta', () => {
     const r = decidir(conversaEm('novo'), nlu(), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'texto', 'pdf', 'texto']);
-    expect(r.saidas[2]?.pdf).toBe('apresentacao');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas[1]?.pdf).toBe('apresentacao');
   });
 
   it('pede dados que faltam quando só veio o dia', () => {

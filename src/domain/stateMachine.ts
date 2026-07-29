@@ -118,7 +118,6 @@ export function decidir(
       return {
         conversa: { ...base, estado: 'aguardando_qualificacao' },
         saidas: [
-          texto(MSG.saudacaoInstitucional),
           texto(MSG.apresentacao),
           { tipo: 'pdf', pdf: 'apresentacao' },
           texto(MSG.perguntaQualificadora),

@@ -6,8 +6,6 @@ export const PERSONA = {
 } as const;
 
 export const MSG = {
-  saudacaoInstitucional: 'Saint Jardin Eventos agradece seu contato. Como podemos ajudar?',
-
   apresentacao:
     `Olá, tudo bem?! Me chamo ${PERSONA.nome}, muito prazer!\n` +
     `Primeiramente, quero agradecer pelo contato. ☺️\n` +

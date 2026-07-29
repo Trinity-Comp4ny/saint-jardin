@@ -4,25 +4,44 @@ import type { MessagingProvider } from '../ports';
 import type { MensagemSaida, TipoPdf } from '../domain/types';
 import { PDF_CATALOGO } from '../domain/pdfs';
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export interface WhatsAppConfig {
   phoneNumberId: string;
   token: string;
   /** Resolve a URL pública/assinada do PDF (ex.: Supabase Storage signed URL). */
   resolverPdfUrl: (tipo: TipoPdf) => Promise<string>;
   versaoGraph?: string;
+  /** Pausa entre mensagens de texto (simula digitação; não a última). */
+  delayEntreMs?: number;
+  /** Pausa após um documento: a Meta entrega PDF mais devagar que texto, então
+   *  esperamos mais para o PDF chegar antes da mensagem seguinte. */
+  delayDepoisPdfMs?: number;
 }
 
 export class WhatsAppCloudProvider implements MessagingProvider {
   constructor(private readonly cfg: WhatsAppConfig) {}
 
   async enviar(telefone: string, saidas: MensagemSaida[]): Promise<void> {
-    // Sequencial para preservar a ordem das mensagens na conversa.
-    for (const s of saidas) {
+    const entre = this.cfg.delayEntreMs ?? 1500;
+    const depoisPdf = this.cfg.delayDepoisPdfMs ?? 4000;
+
+    // Sequencial para preservar a ordem das mensagens na conversa. O envio já é
+    // ordenado, mas documentos são entregues mais devagar que texto: a pausa
+    // maior após um PDF garante que ele apareça antes da próxima mensagem.
+    for (let i = 0; i < saidas.length; i++) {
+      const s = saidas[i];
+      if (!s) continue;
+      let ehPdf = false;
       if (s.tipo === 'pdf' && s.pdf) {
         await this.enviarDocumento(telefone, s.pdf);
+        ehPdf = true;
       } else if (s.texto) {
         await this.enviarTexto(telefone, s.texto);
+      } else {
+        continue;
       }
+      if (i < saidas.length - 1) await sleep(ehPdf ? depoisPdf : entre);
     }
   }
 
