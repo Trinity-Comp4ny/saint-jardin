@@ -125,7 +125,7 @@ Extraia (deixe null o que a mensagem não disser):
   - "negociar": quer desconto, parcelamento ou mudar condição de valor.
   - "fora_do_script": uma PERGUNTA concreta que foge do atendimento padrão (ex.: "tem buffet?", "tem estacionamento?", "qual o endereço?", "aceita pet?"). NÃO use para saudações, agradecimentos, nem quando a pessoa só diz que vai responder, pede um minuto ou manda uma mensagem social — isso é "seguir_fluxo".
   - "seguir_fluxo": caso geral. Inclui informar dados, cumprimentar, agradecer, dizer que vai mandar as informações, pedir um minuto/momento, ou pedir orçamento.
-- afirmativo: true se for uma resposta positiva (sim, quero, pode mandar).
+- afirmativo: true quando a mensagem é uma resposta POSITIVA ou de aceite a uma pergunta de sim/não. Reconheça muitas formas, não só "sim": "quero", "pode mandar", "manda", "pode ser", "por favor", "claro", "com certeza", "aceito", "isso", "ok", "bora", "vamos", "sim por favor", "gostaria sim". Se a pessoa está claramente concordando/pedindo para prosseguir, marque true.
 - visita: SÓ quando o estado for "aguardando_pref_visita" (a noiva está dizendo que dia prefere para a visita ao espaço). Preencha:
   - visita.diaSemana: dia da semana que ela prefere (ex.: "quinta" -> quinta).
   - visita.periodo: "manha" ou "tarde", se ela indicar.

@@ -306,6 +306,11 @@ const CENARIOS: Cenario[] = [
   { nome: 'técnica dia/mês sem ano', categoria: 'visita-tecnica', mensagens: ['sou fornecedora, quero visita técnica dia 20 de outubro'] },
   { nome: 'técnica hoje/amanhã', categoria: 'visita-tecnica', mensagens: ['preciso de uma visita técnica amanhã'] },
 
+  // ── Afirmações variadas (não só "sim") ───────────────────────────────
+  { nome: 'confirma normal com "por favor"', categoria: 'afirmativo', mensagens: ['oi', 'dia de semana, 400', 'por favor', '2027'], estadoFinalEsperado: 'proposta_enviada' },
+  { nome: 'confirma mini com "claro"', categoria: 'afirmativo', mensagens: ['oi', 'dia de semana, 50 pessoas', 'claro'], estadoFinalEsperado: 'proposta_enviada' },
+  { nome: 'confirma proposta com "pode mandar"', categoria: 'afirmativo', mensagens: ['oi', 'sábado, 150, 2027', 'pode mandar sim'], estadoFinalEsperado: 'aguardando_pref_visita' },
+
   // ── Small talk / social (humanização) ────────────────────────────────
   { nome: 'tudo bem? social', categoria: 'social', mensagens: ['Boa tarde', 'Boa tarde Raquel, tudo bem?'] },
   { nome: 'vou passar / um minuto', categoria: 'social', mensagens: ['oi', 'vou te passar as infos', 'só um minuto'] },
