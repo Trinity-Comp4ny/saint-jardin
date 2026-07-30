@@ -98,6 +98,11 @@ export const MSG = {
     `Poxa, a data ${data} já está reservada. 😕 Consigo te oferecer ${alternativa}. ` +
     `Teria essa ou outra data em mente?`,
 
+  dataNoPassado: [
+    'Essa data já passou. ☺️ Você tem uma data mais pra frente em mente?',
+    'Ah, essa data já passou! Qual data você pensou, mais pra frente? 😊',
+  ],
+
   // Placeholder: o Matheus troca depois pelo texto real da Raquel.
   followUp:
     'Oi! Passando pra saber se ficou alguma dúvida sobre o Saint Jardin. ' +

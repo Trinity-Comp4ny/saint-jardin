@@ -299,6 +299,23 @@ describe('visita técnica (valida e repassa)', () => {
   });
 });
 
+describe('data no passado', () => {
+  it('avisa quando a data completa já passou, em vez de enviar a proposta', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', {
+        diaSemana: 'sabado',
+        convidados: 100,
+        data: '2027-01-10',
+        ano: 2027,
+      }),
+      nlu(),
+      { agora: '2027-06-01T12:00:00.000Z' }, // depois de 10/01/2027
+    );
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.saidas[0]?.texto).toMatch(/já passou/i);
+  });
+});
+
 describe('disponibilidade de data', () => {
   it('sugere alternativa quando a data está ocupada', () => {
     const r = decidir(

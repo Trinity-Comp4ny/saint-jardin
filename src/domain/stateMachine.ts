@@ -100,6 +100,15 @@ export function dataCompleta(slots: Slots): string | undefined {
   return undefined;
 }
 
+/** A data completa (YYYY-MM-DD) é anterior a hoje? */
+export function dataNoPassado(dataISO: string, agoraISO: string): boolean {
+  const [y, m, d] = dataISO.slice(0, 10).split('-').map(Number);
+  const data = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1);
+  const hoje = new Date(agoraISO);
+  const hojeLocal = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+  return data.getTime() < hojeLocal.getTime();
+}
+
 function motivoDaIntencao(intencao: EntradaNLU['intencao']): string | null {
   switch (intencao) {
     case 'cliente_fechado':
@@ -130,8 +139,13 @@ function avancarComData(
     return { conversa: base, saidas: [texto(vary(opcoes, ctx.seed))] };
   }
 
-  // Data completa em jogo e ocupada: oferece alternativa.
   const dataISO = dataCompleta(slots);
+  // Data específica já no passado: avisa e pede uma data futura.
+  if (dataISO && dataNoPassado(dataISO, ctx.agora)) {
+    return { conversa: base, saidas: [texto(vary(MSG.dataNoPassado, ctx.seed))] };
+  }
+
+  // Data completa em jogo e ocupada: oferece alternativa.
   const disp = ctx.disponibilidadeData;
   if (dataISO && disp && disp.data === dataISO && !disp.livre) {
     return {
