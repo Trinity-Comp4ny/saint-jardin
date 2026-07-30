@@ -118,14 +118,17 @@ export class SupabaseFila implements Fila {
     if (error) throw new Error(`enfileirar: ${error.message}`);
   }
 
-  async pegarVencidas(agoraISO: string, limite: number): Promise<ItemFila[]> {
+  async pegarVencidas(agoraISO: string, _limite: number): Promise<ItemFila[]> {
+    // Reivindicação ATÔMICA: o UPDATE marca processado_em no mesmo comando que
+    // seleciona (WHERE processado_em IS NULL). Se dois consumidores rodam ao
+    // mesmo tempo (cron sobreposto, ou cron + chamada manual), cada linha é
+    // reivindicada por apenas um — evita processar/responder o mesmo item 2x.
     const { data, error } = await this.db
       .from('fila_mensagens')
-      .select('id, telefone, tipo, conteudo, processar_apos')
+      .update({ processado_em: new Date().toISOString() })
       .is('processado_em', null)
       .lte('processar_apos', agoraISO)
-      .order('processar_apos', { ascending: true })
-      .limit(limite);
+      .select('id, telefone, tipo, conteudo, processar_apos');
     if (error) throw new Error(`pegarVencidas: ${error.message}`);
     return (data ?? []).map((r) => ({
       id: String(r.id),
