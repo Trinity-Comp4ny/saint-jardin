@@ -5,10 +5,12 @@
 
 import { NextResponse } from 'next/server';
 import { assinaturaValida, verificarHandshake } from '../../../src/whatsapp/verifySignature';
-import { ingerirWebhook } from '../../../src/app/pipeline';
-import { montarIngestDeps } from '../../../src/app/deps';
+import { ingerirWebhook, processarFila } from '../../../src/app/pipeline';
+import { montarIngestDeps, montarProcessDeps } from '../../../src/app/deps';
 
 export const runtime = 'nodejs';
+// No modo teste o webhook também processa (síncrono), então precisa de folga.
+export const maxDuration = 60;
 
 export async function GET(req: Request): Promise<Response> {
   const params = new URL(req.url).searchParams;
@@ -32,13 +34,22 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('invalid json', { status: 400 });
   }
 
+  // MODO_TESTE: resposta imediata (delay 0 + processa síncrono, sem esperar o
+  // cron). Em produção: enfileira com delay base + jitter e o cron processa.
+  const teste = process.env.MODO_TESTE === 'true';
+
   const { eventos, fila } = montarIngestDeps();
   const enfileiradas = await ingerirWebhook(body, {
     eventos,
     fila,
     agora: () => new Date().toISOString(),
-    delaySegundos: Number(process.env.DELAY_SEGUNDOS ?? '60'),
+    delaySegundos: teste ? 0 : Number(process.env.DELAY_SEGUNDOS ?? '60'),
+    jitterSegundos: teste ? 0 : Number(process.env.JITTER_SEGUNDOS ?? '0'),
   });
+
+  if (teste && enfileiradas > 0) {
+    await processarFila(montarProcessDeps());
+  }
 
   return NextResponse.json({ ok: true, enfileiradas });
 }

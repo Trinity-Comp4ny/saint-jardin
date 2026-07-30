@@ -15,17 +15,24 @@ export interface IngestDeps {
   eventos: EventStore;
   fila: Fila;
   agora: () => string;
-  /** Delay proposital antes de responder, para não parecer bot. */
+  /** Delay proposital base antes de responder, para não parecer bot. */
   delaySegundos?: number;
+  /** Variação aleatória adicionada ao delay (0..jitter s), para não ser fixo. */
+  jitterSegundos?: number;
+  /** Fonte de aleatoriedade [0,1) (injetável para testes). */
+  rng?: () => number;
 }
 
 /**
  * Recebe o corpo do webhook, deduplica e enfileira cada mensagem com delay.
+ * O delay é base + jitter aleatório: respostas em tempo humano e variável.
  * Retorna quantas mensagens foram enfileiradas.
  */
 export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<number> {
   const mensagens = parseWebhook(body);
-  const delay = deps.delaySegundos ?? 60;
+  const base = deps.delaySegundos ?? 60;
+  const jitterMax = deps.jitterSegundos ?? 0;
+  const rng = deps.rng ?? Math.random;
   let enfileiradas = 0;
 
   for (const msg of mensagens) {
@@ -36,11 +43,12 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
     const conteudo = msg.tipo === 'audio' ? (msg.mediaId ?? '') : (msg.texto ?? '');
     if (!conteudo) continue;
 
+    const jitter = jitterMax > 0 ? Math.floor(rng() * (jitterMax + 1)) : 0;
     await deps.fila.enfileirar({
       telefone: msg.de,
       tipo: msg.tipo,
       conteudo,
-      processarApos: adiarISO(deps.agora(), delay),
+      processarApos: adiarISO(deps.agora(), base + jitter),
     });
     enfileiradas++;
   }
