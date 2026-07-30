@@ -40,6 +40,25 @@ precisa de **horários (slots)**, não de dia inteiro. São contratos diferentes
 5. **Fallback seguro:** sem `AgendaVisita` configurada, o aceite de visita volta ao handoff seco de
    antes. A feature liga/desliga por presença do adapter.
 
+## Revisão 30/07/2026 — o bot NÃO marca; coleta e repassa
+
+Feedback da Raquel depois de ver o fluxo automático: ela prefere **agendar as visitas ela mesma**
+(com a mãe). Motivos: precisa olhar a agenda, negociar o dia com o cliente, e atende novos clientes
+quase todo dia (inclusive domingo). Então o agendamento automático (marcar sozinho) foi revertido.
+
+Novo comportamento:
+- **Visita de noiva (novos clientes):** o bot pergunta a preferência de dia/horário e **repassa** para
+  a Raquel (handoff com a preferência anexada). Quem marca é ela.
+- **Visita técnica (fornecedor de casamento fechado):** regras da Raquel — **terça a sexta** e **mínimo
+  30 dias de antecedência**. O bot valida a data pedida: se cumpre, responde "vou verificar a
+  disponibilidade" e repassa; se não, explica a regra e pede outra data. Quem confirma é a Raquel.
+- **Google Calendar:** não é usado neste momento (nem leitura). O adapter `GoogleAgendaVisita`, a porta
+  `AgendaVisita` e o `SupabaseAgendaVisita` **ficam guardados no código** (desconectados do fluxo) para
+  retomar quando/if a Raquel quiser automação de leitura ou escrita.
+
+O restante deste ADR (porta plugável, calendário dedicado, separação de dado sensível) segue válido como
+base para a retomada futura.
+
 ## Consequências
 
 - Ganho direto: a noiva sai da conversa com um horário proposto e marcado, não no vácuo esperando a

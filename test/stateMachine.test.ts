@@ -178,57 +178,77 @@ describe('dia de semana acima do limite do mini', () => {
   });
 });
 
-describe('agendamento de visita', () => {
-  const SLOT = '2026-08-06T14:00'; // quinta-feira
-  const ctxVisita = (slots: string[]): ContextoDecisao => ({
-    agora: AGORA,
-    visita: { ativo: true, slots },
-  });
-
-  it('aceite da visita com agenda ativa pergunta a preferência', () => {
-    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctxVisita([]));
-    expect(r.conversa.estado).toBe('agendando_visita');
-    expect(r.saidas[0]?.texto).toMatch(/prefere algum dia/i);
-  });
-
-  it('sem agenda configurada, aceite da visita transborda (fallback)', () => {
+describe('visita de noiva (coleta e repassa)', () => {
+  it('aceite da visita pergunta a preferência de dia', () => {
     const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
+  });
+
+  it('intenção agendar_visita na proposta também coleta a preferência (não transborda)', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ intencao: 'agendar_visita' }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+  });
+
+  it('com a preferência, repassa para a Raquel com o dia no motivo', () => {
+    const r = decidir(
+      conversaEm('aguardando_pref_visita'),
+      nlu({ visita: { diaSemana: 'sabado', periodo: 'manha' } }),
+      ctx,
+    );
     expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.motivoHandoff).toMatch(/visita da noiva/);
+    expect(r.conversa.motivoHandoff).toMatch(/sabado/);
+    expect(r.saidas[0]?.texto).toMatch(/te retorno/i);
+  });
+});
+
+describe('visita técnica (valida e repassa)', () => {
+  it('sem data, pergunta informando a regra (terça a sexta, 30 dias)', () => {
+    const r = decidir(conversaEm('novo'), nlu({ intencao: 'visita_tecnica' }), ctx);
+    expect(r.conversa.estado).toBe('visita_tecnica_data');
+    expect(r.saidas[0]?.texto).toMatch(/terça a sexta/i);
   });
 
-  it('no agendamento, oferece um horário concreto e guarda o proposto', () => {
-    const r = decidir(conversaEm('agendando_visita'), nlu(), ctxVisita([SLOT]));
-    expect(r.conversa.estado).toBe('aguardando_confirmacao_visita');
-    expect(r.conversa.visitaProposta).toBe(SLOT);
-    expect(r.saidas[0]?.texto).toMatch(/quinta-feira \(06\/08\) às 14h/);
+  it('data em fim de semana: orienta e segue coletando', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'visita_tecnica', slots: { data: '2026-09-19' } }), // sábado, 60d
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('visita_tecnica_data');
+    expect(r.saidas[0]?.texto).toMatch(/terça a sexta/i);
   });
 
-  it('sem horário nas janelas, transborda para agendar manual', () => {
-    const r = decidir(conversaEm('agendando_visita'), nlu(), ctxVisita([]));
+  it('data com menos de 30 dias: orienta a antecedência', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'visita_tecnica', slots: { data: '2026-08-05' } }), // quarta, 15d
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('visita_tecnica_data');
+    expect(r.saidas[0]?.texto).toMatch(/30 dias/);
+  });
+
+  it('data terça-sexta e ≥30 dias: avisa que vai verificar e repassa', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'visita_tecnica', slots: { data: '2026-09-16' } }), // quarta, 57d
+      ctx,
+    );
     expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.motivoHandoff).toMatch(/visita técnica/);
+    expect(r.saidas[0]?.texto).toMatch(/verificar a disponibilidade/i);
   });
 
-  it('ao confirmar o horário, fecha em visita_agendada e sinaliza a marcação', () => {
-    const conversa = { ...conversaEm('aguardando_confirmacao_visita'), visitaProposta: SLOT };
-    const r = decidir(conversa, nlu({ afirmativo: true }), ctxVisita([SLOT]));
-    expect(r.conversa.estado).toBe('visita_agendada');
-    expect(r.visitaParaMarcar).toBe(SLOT);
-    expect(r.saidas[0]?.texto).toMatch(/Marcado/i);
-  });
-
-  it('se pede outro dia, reoferece com a nova preferência', () => {
-    const OUTRO = '2026-08-08T09:00'; // sábado
-    const conversa = { ...conversaEm('aguardando_confirmacao_visita'), visitaProposta: SLOT };
-    const r = decidir(conversa, nlu({ visita: { diaSemana: 'sabado' } }), ctxVisita([OUTRO]));
-    expect(r.conversa.estado).toBe('aguardando_confirmacao_visita');
-    expect(r.conversa.visitaProposta).toBe(OUTRO);
-    expect(r.visitaParaMarcar).toBeUndefined();
-  });
-
-  it('recusa sem alternativa transborda para a Raquel', () => {
-    const conversa = { ...conversaEm('aguardando_confirmacao_visita'), visitaProposta: SLOT };
-    const r = decidir(conversa, nlu(), ctxVisita([SLOT]));
+  it('continua o fluxo técnico pelo estado, mesmo sem intenção explícita', () => {
+    const r = decidir(
+      conversaEm('visita_tecnica_data'),
+      nlu({ slots: { data: '2026-08-25' } }), // terça, 35d
+      ctx,
+    );
     expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.motivoHandoff).toMatch(/visita técnica/);
   });
 });
 
@@ -251,15 +271,11 @@ describe('handoff', () => {
     expect(r.saidas).toHaveLength(0);
   });
 
-  it('transborda quando quer agendar visita', () => {
-    const r = decidir(conversaEm('proposta_enviada'), nlu({ intencao: 'agendar_visita' }), ctx);
+  it('transborda quando quer agendar visita fora do fluxo de visita', () => {
+    // Em proposta_enviada/aguardando_pref_visita a visita é coletada; nos demais
+    // estados, "quer agendar visita" ainda é handoff.
+    const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ intencao: 'agendar_visita' }), ctx);
     expect(r.conversa.estado).toBe('handoff');
-  });
-
-  it('aceite da visita após a proposta transborda para humano', () => {
-    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
-    expect(r.conversa.estado).toBe('handoff');
-    expect(r.saidas).toHaveLength(0);
   });
 
   it('sem aceite, reforça o convite à visita', () => {

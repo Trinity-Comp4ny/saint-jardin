@@ -54,17 +54,27 @@ export const MSG = {
     'Vamos agendar um dia para você conhecer nossa estrutura e analisar a ' +
     'experiência que oferecemos no Saint Jardin?',
 
+  // Visita de noiva: o bot coleta a preferência e repassa para a Raquel marcar.
   perguntaPreferenciaVisita:
-    'Que ótimo! ☺️ Você prefere algum dia para conhecer o espaço? ' +
-    'Pode ser essa semana ou a próxima.',
+    'Que ótimo! ☺️ Tem algum dia ou horário melhor para você? ' +
+    'Assim já confirmo com a equipe.',
 
-  // `slot` é o texto já formatado (ex.: "quinta-feira (07/08) às 14h").
-  ofertaHorarioVisita: (slot: string): string =>
-    `Consigo ${slot}. Fica bom para você? ☺️`,
+  visitaVouRetornar:
+    'Perfeito! Já verifico os horários e te retorno para combinarmos, tá? ☺️',
 
-  visitaConfirmada: (slot: string): string =>
-    `Marcado! Te espero ${slot} aqui no Saint Jardin. ☺️ ` +
-    `Qualquer coisa, é só me avisar por aqui.`,
+  // Visita técnica (fornecedor de casamento fechado): regra e validação.
+  perguntaDataVisitaTecnica:
+    'Nossas visitas técnicas são de terça a sexta, com pelo menos 30 dias de ' +
+    'antecedência. Para qual data seria? ☺️',
+
+  visitaTecnicaForaRegra: (motivo: 'fim_de_semana' | 'antecedencia'): string =>
+    motivo === 'fim_de_semana'
+      ? 'A visita técnica é feita de terça a sexta. Tem algum dia dentro desses? ☺️'
+      : 'A visita técnica precisa ser marcada com pelo menos 30 dias de ' +
+        'antecedência. Consegue uma data um pouco mais para frente? ☺️',
+
+  visitaTecnicaVouVerificar:
+    'Perfeito! Vou verificar a disponibilidade e já te retorno, tá? ☺️',
 
   pedirDadosFaltantes: (faltando: string[]): string =>
     `Só pra eu montar seu orçamento certinho, você pode me confirmar ${faltando.join(

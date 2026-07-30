@@ -16,6 +16,7 @@ const DIAS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'doming
 const INTENCOES = [
   'seguir_fluxo',
   'agendar_visita',
+  'visita_tecnica',
   'negociar',
   'fora_do_script',
   'cliente_fechado',
@@ -112,16 +113,18 @@ Extraia (deixe null o que a mensagem não disser):
 - slots.convidados: número estimado de convidados (ex.: "150 pessoas" -> 150).
 - intencao:
   - "cliente_fechado": dá a entender que JÁ contratou/fechou o casamento.
-  - "agendar_visita": quer marcar/agendar uma visita.
+  - "agendar_visita": a noiva/cliente quer conhecer o espaço (visita normal).
+  - "visita_tecnica": é um FORNECEDOR (buffet, decorador, assessoria) de um casamento já fechado querendo fazer uma VISITA TÉCNICA no espaço. Use só quando a pessoa fala explicitamente em "visita técnica" ou se identifica como fornecedor de um evento.
   - "negociar": quer desconto, parcelamento ou mudar condição de valor.
   - "fora_do_script": pergunta que foge do primeiro atendimento padrão.
   - "seguir_fluxo": caso geral (informa dados, cumprimenta, pede orçamento).
 - afirmativo: true se for uma resposta positiva (sim, quero, pode mandar).
-- visita: SÓ quando o estado for "agendando_visita" ou "aguardando_confirmacao_visita" (a noiva está escolhendo o dia da VISITA ao espaço). Preencha:
-  - visita.diaSemana: dia da semana que ela prefere para a visita (ex.: "quinta" -> quinta).
+- visita: SÓ quando o estado for "aguardando_pref_visita" (a noiva está dizendo que dia prefere para a visita ao espaço). Preencha:
+  - visita.diaSemana: dia da semana que ela prefere (ex.: "quinta" -> quinta).
   - visita.periodo: "manha" ou "tarde", se ela indicar.
   - visita.indiferente: true se ela disser que tanto faz / qualquer dia / você que escolhe.
-  Nesses estados, a intenção é "seguir_fluxo" (ela está agendando), a não ser que claramente negocie valor ou saia do assunto.
+  Nesse estado, a intenção é "seguir_fluxo" ou "agendar_visita", a não ser que claramente negocie valor ou saia do assunto.
+- No estado "visita_tecnica_data" a pessoa está informando a DATA da visita técnica: extraia data/mesDia/ano normalmente e mantenha a intenção "visita_tecnica".
 - nomeDetectado / dataEventoDetectada: se a pessoa se identificar como cliente já fechado.`;
 
 export class GeminiNLU implements NLU {

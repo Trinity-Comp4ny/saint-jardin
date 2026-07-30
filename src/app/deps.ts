@@ -6,12 +6,10 @@
 //   - processamento (/api/process): NLU, calendário, envio, transcrição, handoff.
 
 import { GeminiNLU } from '../adapters/GeminiNLU';
-import { GoogleAgendaVisita } from '../adapters/GoogleAgendaVisita';
 import { GroqTranscriber, type Transcriber } from '../adapters/GroqTranscriber';
 import { TelegramNotifier } from '../adapters/TelegramNotifier';
 import { WhatsAppCloudProvider } from '../adapters/WhatsAppCloudProvider';
 import {
-  SupabaseAgendaVisita,
   SupabaseCalendario,
   SupabaseContatoRepo,
   SupabaseConversaRepo,
@@ -22,8 +20,7 @@ import {
 } from '../adapters/supabase';
 import { PDF_CATALOGO } from '../domain/pdfs';
 import type { TipoPdf } from '../domain/types';
-import type { AgendaVisita, EventStore, Fila, Notifier } from '../ports';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { EventStore, Fila, Notifier } from '../ports';
 import type { Deps } from './orchestrator';
 
 function obrigatorio(nome: string): string {
@@ -52,25 +49,6 @@ function transcriberLazy(whatsappToken: string): Transcriber {
       return real.transcrever(mediaId);
     },
   };
-}
-
-/**
- * Agenda de visita: Google Calendar quando as três envs existem (ADR-0005 opção C),
- * senão a tabela `visitas` do Supabase. Trocar de fonte = só a env, sem tocar no fluxo.
- * A GOOGLE_PRIVATE_KEY vem com "\n" literais no painel da Vercel; desescapamos aqui.
- */
-function criarAgendaVisita(db: SupabaseClient): AgendaVisita {
-  const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_PRIVATE_KEY;
-  const calendarId = process.env.GOOGLE_CALENDAR_ID;
-  if (clientEmail && privateKey && calendarId) {
-    return new GoogleAgendaVisita({
-      clientEmail,
-      privateKey: privateKey.replace(/\\n/g, '\n'),
-      calendarId,
-    });
-  }
-  return new SupabaseAgendaVisita(db);
 }
 
 function notifierLazy(): Notifier {
@@ -129,7 +107,6 @@ export function montarProcessDeps(): ProcessAppDeps {
     conversas: new SupabaseConversaRepo(db),
     nlu: new GeminiNLU(obrigatorio('GEMINI_API_KEY')),
     calendario: new SupabaseCalendario(db),
-    agendaVisita: criarAgendaVisita(db),
     messaging,
     notifier: notifierLazy(),
     mensagens: new SupabaseMensagemRepo(db),

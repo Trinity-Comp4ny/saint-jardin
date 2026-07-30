@@ -3,10 +3,8 @@
 // colaterais (enviar mensagens, alertar handoff, persistir).
 
 import { dataCompleta, decidir, novaConversa, type ContextoDecisao } from '../domain/stateMachine';
-import { descreverSlot } from '../domain/visita';
 import type { Conversa, MensagemSaida } from '../domain/types';
 import type {
-  AgendaVisita,
   Calendario,
   ContatoRepository,
   ConversaRepository,
@@ -21,8 +19,6 @@ export interface Deps {
   conversas: ConversaRepository;
   nlu: NLU;
   calendario: Calendario;
-  /** Agenda de visita (ADR-0005). Ausente = aceite de visita cai no handoff. */
-  agendaVisita?: AgendaVisita;
   messaging: MessagingProvider;
   notifier: Notifier;
   agora: () => string;
@@ -114,37 +110,10 @@ export async function processarMensagem(
     };
   }
 
-  // 4b. Agenda de visita: sinaliza que a feature está ativa e, quando já estamos
-  // agendando, busca os horários livres conforme a preferência da noiva.
-  if (deps.agendaVisita) {
-    const noFluxoVisita =
-      conversaAtual.estado === 'agendando_visita' ||
-      conversaAtual.estado === 'aguardando_confirmacao_visita';
-    ctx.visita = { ativo: true, slots: [] };
-    if (noFluxoVisita) {
-      ctx.visita.slots = await deps.agendaVisita.slotsLivres({
-        aPartirDeISO: deps.agora(),
-        preferencia: nlu.visita,
-        limite: 5,
-      });
-    }
-  }
-
   // 5. Decisão determinística.
-  const resultado = decidir(conversaAtual, nlu, ctx);
-  const { conversa, saidas } = resultado;
+  const { conversa, saidas } = decidir(conversaAtual, nlu, ctx);
 
-  // 6. Efeito de escrita: marca a visita antes de confirmar à noiva. Se falhar,
-  // não bloqueia a confirmação — a Raquel é avisada abaixo e concilia.
-  if (resultado.visitaParaMarcar && deps.agendaVisita) {
-    try {
-      await deps.agendaVisita.marcar(resultado.visitaParaMarcar, telefone);
-    } catch {
-      // marcação reenviável; a Raquel recebe o aviso mesmo assim.
-    }
-  }
-
-  // 7. Efeitos colaterais de mensagem.
+  // 6. Efeitos colaterais de mensagem.
   if (saidas.length > 0) {
     await deps.messaging.enviar(telefone, saidas);
     for (const s of saidas) {
@@ -158,11 +127,9 @@ export async function processarMensagem(
   }
   await deps.conversas.salvar(conversa);
   // conversaAtual nunca é 'handoff' aqui (guardado no topo), então basta olhar o novo estado.
+  // Vale para a visita da noiva e a técnica: ambas terminam em handoff com o motivo pronto.
   if (conversa.estado === 'handoff') {
     await alertarSeguro(deps, conversa, conversa.motivoHandoff ?? 'handoff');
-  } else if (resultado.visitaParaMarcar) {
-    // Visita marcada pelo bot: avisa a Raquel (não é silêncio de handoff).
-    await alertarSeguro(deps, conversa, `visita agendada: ${descreverSlot(resultado.visitaParaMarcar)}`);
   }
 
   return { conversa, saidas };

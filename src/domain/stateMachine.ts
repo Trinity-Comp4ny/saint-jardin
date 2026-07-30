@@ -15,7 +15,7 @@ import {
 } from './types';
 import { MSG } from './persona';
 import { pdfPropostaPorAno } from './pdfs';
-import { descreverSlot } from './visita';
+import { descreverData, resolverDataTecnica, validarVisitaTecnica } from './visita';
 
 export interface DisponibilidadeData {
   data: string;
@@ -23,25 +23,14 @@ export interface DisponibilidadeData {
   alternativa?: string;
 }
 
-/** Estado da agenda de visita para a decisão (calculado pelo orchestrator). */
-export interface ContextoVisita {
-  /** Há agenda de visita configurada? Se não, o aceite de visita cai no handoff. */
-  ativo: boolean;
-  /** Próximos horários livres já filtrados pela preferência da noiva (vazio = sem vaga). */
-  slots: string[];
-}
-
 export interface ContextoDecisao {
   agora: string;
   disponibilidadeData?: DisponibilidadeData;
-  visita?: ContextoVisita;
 }
 
 export interface ResultadoDecisao {
   conversa: Conversa;
   saidas: MensagemSaida[];
-  /** Horário de visita que o orchestrator deve efetivamente marcar (efeito colateral). */
-  visitaParaMarcar?: string;
 }
 
 const texto = (t: string): MensagemSaida => ({ tipo: 'texto', texto: t });
@@ -156,6 +145,51 @@ function avancarComData(
   };
 }
 
+/** Texto curto da preferência de visita da noiva, para anexar ao motivo do handoff. */
+function prefVisitaTexto(nlu: EntradaNLU): string {
+  const v = nlu.visita;
+  if (!v) return '';
+  if (v.indiferente) return ' (tanto faz)';
+  const partes: string[] = [];
+  if (v.diaSemana) partes.push(v.diaSemana);
+  if (v.periodo) partes.push(v.periodo === 'manha' ? 'de manhã' : 'de tarde');
+  return partes.length ? ` (${partes.join(' ')})` : '';
+}
+
+/**
+ * Visita técnica (fornecedor): o bot valida a data (terça a sexta, ≥30 dias) e
+ * repassa para a Raquel. Não marca. Sem data válida, orienta e segue coletando.
+ */
+function fluxoVisitaTecnica(
+  base: Conversa,
+  slots: Slots,
+  ctx: ContextoDecisao,
+): ResultadoDecisao {
+  const dataISO = resolverDataTecnica(slots, ctx.agora);
+  if (!dataISO) {
+    return {
+      conversa: { ...base, estado: 'visita_tecnica_data' },
+      saidas: [texto(MSG.perguntaDataVisitaTecnica)],
+    };
+  }
+  const validacao = validarVisitaTecnica(dataISO, ctx.agora);
+  if (!validacao.ok) {
+    return {
+      conversa: { ...base, estado: 'visita_tecnica_data' },
+      saidas: [texto(MSG.visitaTecnicaForaRegra(validacao.motivo))],
+    };
+  }
+  // Dentro da regra: avisa que vai verificar e repassa para a Raquel confirmar.
+  return {
+    conversa: {
+      ...base,
+      estado: 'handoff',
+      motivoHandoff: `visita técnica: ${descreverData(dataISO)}`,
+    },
+    saidas: [texto(MSG.visitaTecnicaVouVerificar)],
+  };
+}
+
 export function decidir(
   conversa: Conversa,
   nlu: EntradaNLU,
@@ -174,15 +208,19 @@ export function decidir(
     saidas: [],
   });
 
+  // Visita técnica tem fluxo próprio (valida e repassa), em qualquer estado.
+  if (nlu.intencao === 'visita_tecnica' || conversa.estado === 'visita_tecnica_data') {
+    return fluxoVisitaTecnica(base, slots, ctx);
+  }
+
   // Intenções que exigem humano têm prioridade, exceto na primeira saudação
-  // (queremos ao menos apresentar o espaço antes de transbordar). Durante o
-  // agendamento, "agendar_visita" é redundante (já estamos agendando): ignoramos
-  // esse motivo para não transbordar no meio do fluxo; negociar/fora do script seguem.
-  const noFluxoVisita =
-    conversa.estado === 'agendando_visita' ||
-    conversa.estado === 'aguardando_confirmacao_visita';
+  // (queremos ao menos apresentar o espaço antes de transbordar). A visita de
+  // noiva é coletada aqui (proposta_enviada / aguardando_pref_visita), então
+  // "agendar_visita" nesses estados NÃO vira handoff genérico; negociar/fora seguem.
+  const coletandoVisita =
+    conversa.estado === 'proposta_enviada' || conversa.estado === 'aguardando_pref_visita';
   const motivo = motivoDaIntencao(nlu.intencao);
-  if (motivo && conversa.estado !== 'novo' && !(nlu.intencao === 'agendar_visita' && noFluxoVisita)) {
+  if (motivo && conversa.estado !== 'novo' && !(nlu.intencao === 'agendar_visita' && coletandoVisita)) {
     return handoff(motivo);
   }
   // No primeiro contato, só o caso "cliente já fechado" transborda de imediato.
@@ -287,60 +325,27 @@ export function decidir(
 
     case 'proposta_enviada':
       // Orçamento já foi e o único convite em aberto é a visita. Um "sim/vamos"
-      // é aceite da visita.
-      if (nlu.afirmativo) {
-        // Com agenda de visita ativa, o bot conduz o agendamento (ADR-0005);
-        // senão, transborda para a Raquel agendar (comportamento anterior).
-        if (ctx.visita?.ativo) {
-          return {
-            conversa: { ...base, estado: 'agendando_visita' },
-            saidas: [texto(MSG.perguntaPreferenciaVisita)],
-          };
-        }
-        return handoff('quer agendar visita');
+      // é aceite: pergunta a preferência de dia e, na resposta, repassa para a
+      // Raquel marcar (ADR-0005 rev.: o bot não agenda a visita de noiva).
+      if (nlu.afirmativo || nlu.intencao === 'agendar_visita') {
+        return {
+          conversa: { ...base, estado: 'aguardando_pref_visita' },
+          saidas: [texto(MSG.perguntaPreferenciaVisita)],
+        };
       }
       // Sem aceite claro, reforça o convite à visita.
       return { conversa: base, saidas: [texto(MSG.conviteVisita)] };
 
-    case 'agendando_visita': {
-      const proposto = (ctx.visita?.slots ?? [])[0];
-      if (!proposto) {
-        return handoff('visita: sem horário nas janelas, agendar manual');
-      }
+    case 'aguardando_pref_visita':
+      // Coletamos a preferência (se veio) e repassamos para a Raquel agendar.
       return {
-        conversa: { ...base, estado: 'aguardando_confirmacao_visita', visitaProposta: proposto },
-        saidas: [texto(MSG.ofertaHorarioVisita(descreverSlot(proposto)))],
+        conversa: {
+          ...base,
+          estado: 'handoff',
+          motivoHandoff: `visita da noiva${prefVisitaTexto(nlu)}`,
+        },
+        saidas: [texto(MSG.visitaVouRetornar)],
       };
-    }
-
-    case 'aguardando_confirmacao_visita': {
-      // A noiva topou o horário oferecido: marca e avisa a Raquel.
-      if (nlu.afirmativo && base.visitaProposta) {
-        return {
-          conversa: { ...base, estado: 'visita_agendada' },
-          saidas: [texto(MSG.visitaConfirmada(descreverSlot(base.visitaProposta)))],
-          visitaParaMarcar: base.visitaProposta,
-        };
-      }
-      // Pediu outro dia/horário: reoferece com a nova preferência já refletida nos slots.
-      const querOutro =
-        nlu.visita !== undefined &&
-        (nlu.visita.diaSemana !== undefined ||
-          nlu.visita.periodo !== undefined ||
-          nlu.visita.indiferente === true);
-      if (querOutro) {
-        const proposto = (ctx.visita?.slots ?? [])[0];
-        if (!proposto) {
-          return handoff('visita: sem horário nas janelas, agendar manual');
-        }
-        return {
-          conversa: { ...base, estado: 'aguardando_confirmacao_visita', visitaProposta: proposto },
-          saidas: [texto(MSG.ofertaHorarioVisita(descreverSlot(proposto)))],
-        };
-      }
-      // Recusa sem alternativa clara: deixa a Raquel ajustar.
-      return handoff('visita: ajustar horário com a noiva');
-    }
 
     default:
       return { conversa: base, saidas: [] };

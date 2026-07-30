@@ -58,7 +58,7 @@ export class SupabaseConversaRepo implements ConversaRepository {
   async obter(telefone: string): Promise<Conversa | null> {
     const { data } = await this.db
       .from('conversas')
-      .select('telefone, estado, slots, motivo_handoff, visita_proposta, criado_em, atualizado_em')
+      .select('telefone, estado, slots, motivo_handoff, criado_em, atualizado_em')
       .eq('telefone', telefone)
       .maybeSingle();
     return data ? mapConversa(data) : null;
@@ -71,7 +71,6 @@ export class SupabaseConversaRepo implements ConversaRepository {
         estado: conversa.estado,
         slots: conversa.slots,
         motivo_handoff: conversa.motivoHandoff ?? null,
-        visita_proposta: conversa.visitaProposta ?? null,
         criado_em: conversa.criadoEm,
         atualizado_em: conversa.atualizadoEm,
       },
@@ -246,7 +245,6 @@ interface LinhaConversa {
   estado: string;
   slots: unknown;
   motivo_handoff: string | null;
-  visita_proposta?: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -257,7 +255,6 @@ function mapConversa(r: LinhaConversa): Conversa {
     estado: r.estado as Conversa['estado'],
     slots: (r.slots ?? {}) as Slots,
     motivoHandoff: r.motivo_handoff ?? undefined,
-    visitaProposta: r.visita_proposta ?? undefined,
     criadoEm: r.criado_em,
     atualizadoEm: r.atualizado_em,
   };

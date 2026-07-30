@@ -52,11 +52,9 @@ export type EstadoConversa =
   // esperamos a noiva confirmar que quer receber a proposta normal.
   | 'aguardando_confirmacao_normal'
   | 'proposta_enviada'
-  // Agendamento de visita (ADR-0005): pergunta preferência -> oferta horário ->
-  // confirma e marca.
-  | 'agendando_visita'
-  | 'aguardando_confirmacao_visita'
-  | 'visita_agendada'
+  // Visita (ADR-0005 rev. 30/07): o bot coleta e repassa; não marca.
+  | 'aguardando_pref_visita' // noiva aceitou; coletando dia de preferência
+  | 'visita_tecnica_data' // fornecedor pediu visita técnica; coletando/validando a data
   | 'handoff' // precisa da Raquel; bot fica em silêncio
   | 'humano'; // Raquel assumiu a conversa
 
@@ -65,6 +63,7 @@ export type StatusContato = 'lead' | 'fechado';
 export type Intencao =
   | 'seguir_fluxo'
   | 'agendar_visita'
+  | 'visita_tecnica' // fornecedor de casamento já fechado pedindo visita técnica
   | 'negociar'
   | 'fora_do_script'
   | 'cliente_fechado';
@@ -82,8 +81,6 @@ export interface Conversa {
   estado: EstadoConversa;
   slots: Slots;
   motivoHandoff?: string;
-  /** Horário de visita já oferecido à noiva, aguardando confirmação ("YYYY-MM-DDTHH:mm"). */
-  visitaProposta?: string;
   criadoEm: string;
   atualizadoEm: string;
 }
