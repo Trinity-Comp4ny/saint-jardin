@@ -20,8 +20,9 @@ create table if not exists contatos (
 create table if not exists conversas (
   id             uuid primary key default gen_random_uuid(),
   telefone       text not null unique,
-  estado         text not null default 'novo'
-                 check (estado in ('novo','aguardando_qualificacao','aguardando_interesse_mini','proposta_enviada','handoff','humano')),
+  -- Sem CHECK: os estados válidos são definidos pelo tipo EstadoConversa (TypeScript).
+  -- Um CHECK duplicado no banco desatualiza e trava o salvamento (ver remover_check_estado.sql).
+  estado         text not null default 'novo',
   slots          jsonb not null default '{}'::jsonb,
   motivo_handoff text,
   criado_em      timestamptz not null default now(),
