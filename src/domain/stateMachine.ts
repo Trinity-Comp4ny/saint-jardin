@@ -6,6 +6,7 @@
 import {
   DIAS_DE_SEMANA,
   LIMITE_MINI_WEDDING,
+  type Ano,
   type Conversa,
   type EntradaNLU,
   type MensagemSaida,
@@ -66,11 +67,29 @@ export function ehMiniWedding(slots: Slots): boolean {
 function mesclarSlots(atual: Slots, novo: Slots): Slots {
   return {
     data: novo.data ?? atual.data,
+    mesDia: novo.mesDia ?? atual.mesDia,
     ano: novo.ano ?? atual.ano,
     diaSemana: novo.diaSemana ?? atual.diaSemana,
     preferenciaDia: novo.preferenciaDia ?? atual.preferenciaDia,
     convidados: novo.convidados ?? atual.convidados,
   };
+}
+
+/** Ano do evento, seja informado direto ou deduzido de uma data completa. */
+export function anoEfetivo(slots: Slots): Ano | undefined {
+  if (slots.ano) return slots.ano;
+  if (slots.data) {
+    const a = Number(slots.data.slice(0, 4));
+    if (a === 2027 || a === 2028) return a;
+  }
+  return undefined;
+}
+
+/** Data ISO completa: a data explícita, ou dia/mês combinado com o ano já sabido. */
+export function dataCompleta(slots: Slots): string | undefined {
+  if (slots.data) return slots.data;
+  if (slots.mesDia && slots.ano) return `${slots.ano}-${slots.mesDia}`;
+  return undefined;
 }
 
 function motivoDaIntencao(intencao: EntradaNLU['intencao']): string | null {
@@ -86,6 +105,43 @@ function motivoDaIntencao(intencao: EntradaNLU['intencao']): string | null {
     default:
       return null;
   }
+}
+
+/**
+ * Evento de valor normal com dia e convidados já sabidos: cuida da data.
+ * Pergunta a data específica; se vier só dia/mês, pergunta o ano; com o ano
+ * definido (direto ou pela data completa), checa disponibilidade e envia a proposta.
+ */
+function avancarComData(
+  base: Conversa,
+  slots: Slots,
+  ctx: ContextoDecisao,
+): ResultadoDecisao {
+  const ano = anoEfetivo(slots);
+  if (!ano) {
+    // Sem ano ainda: se já temos o dia/mês, falta só o ano; senão, pedimos a data.
+    const pergunta = slots.mesDia ? MSG.perguntaAno : MSG.perguntaData;
+    return { conversa: base, saidas: [texto(pergunta)] };
+  }
+
+  // Data completa em jogo e ocupada: oferece alternativa.
+  const dataISO = dataCompleta(slots);
+  const disp = ctx.disponibilidadeData;
+  if (dataISO && disp && disp.data === dataISO && !disp.livre) {
+    return {
+      conversa: base,
+      saidas: [texto(MSG.dataIndisponivel(dataISO, disp.alternativa ?? 'outra data'))],
+    };
+  }
+
+  return {
+    conversa: { ...base, estado: 'proposta_enviada' },
+    saidas: [
+      texto(MSG.orcamentoNormal),
+      { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
+      texto(MSG.conviteVisita),
+    ],
+  };
 }
 
 export function decidir(
@@ -168,27 +224,34 @@ export function decidir(
         };
       }
 
-      // Evento normal: precisa do ano para escolher o PDF.
-      if (!slots.ano) {
-        return { conversa: base, saidas: [texto(MSG.perguntaAno)] };
-      }
-
-      // Se o lead deu uma data específica e ela está ocupada, sugere alternativa.
-      const disp = ctx.disponibilidadeData;
-      if (disp && disp.data === slots.data && !disp.livre) {
+      // Dia de semana acima do limite do mini (>80): não cabe no mini. Explica e
+      // espera a noiva confirmar que quer a proposta normal antes de enviá-la.
+      if (classificarDia(slots) === 'dia_de_semana' && slots.convidados !== undefined) {
         return {
-          conversa: base,
-          saidas: [texto(MSG.dataIndisponivel(disp.data, disp.alternativa ?? 'outra data'))],
+          conversa: { ...base, estado: 'aguardando_confirmacao_normal' },
+          saidas: [texto(MSG.explicaLimiteNormal(slots.convidados))],
         };
       }
 
+      // Fim de semana (valor normal): segue para a data e a proposta.
+      return avancarComData(base, slots, ctx);
+    }
+
+    case 'aguardando_confirmacao_normal': {
+      // A noiva pode ter corrigido os dados (ex.: reduziu convidados) e agora caber no mini.
+      if (ehMiniWedding(slots)) {
+        return {
+          conversa: { ...base, estado: 'aguardando_interesse_mini' },
+          saidas: [texto(MSG.ofertaMini)],
+        };
+      }
+      if (nlu.afirmativo) {
+        return avancarComData(base, slots, ctx);
+      }
+      // Sem "sim" claro: reforça o convite à proposta, sem mandar o PDF ainda.
       return {
-        conversa: { ...base, estado: 'proposta_enviada' },
-        saidas: [
-          texto(MSG.orcamentoNormal),
-          { tipo: 'pdf', pdf: pdfPropostaPorAno(slots.ano) },
-          texto(MSG.conviteVisita),
-        ],
+        conversa: base,
+        saidas: [texto(MSG.explicaLimiteNormal(slots.convidados ?? LIMITE_MINI_WEDDING))],
       };
     }
 

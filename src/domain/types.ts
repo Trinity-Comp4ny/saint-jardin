@@ -23,8 +23,10 @@ export const ANOS_DISPONIVEIS: Ano[] = [2027, 2028];
 export type PreferenciaDia = 'fim_de_semana' | 'dia_de_semana';
 
 export interface Slots {
-  /** Data do evento em ISO (yyyy-mm-dd), quando informada com precisão. */
+  /** Data do evento em ISO (yyyy-mm-dd), quando informada com precisão (dia, mês e ano). */
   data?: string;
+  /** Dia e mês sem ano (formato "MM-DD"), quando a noiva diz "26 de janeiro" sem citar o ano. */
+  mesDia?: string;
   ano?: Ano;
   diaSemana?: DiaSemana;
   /** Preferência genérica quando o dia exato não foi dado ("fim de semana" / "dia de semana"). */
@@ -36,6 +38,9 @@ export type EstadoConversa =
   | 'novo'
   | 'aguardando_qualificacao'
   | 'aguardando_interesse_mini'
+  // dia de semana com mais de 80 convidados: explicamos que não cabe no mini e
+  // esperamos a noiva confirmar que quer receber a proposta normal.
+  | 'aguardando_confirmacao_normal'
   | 'proposta_enviada'
   | 'handoff' // precisa da Raquel; bot fica em silêncio
   | 'humano'; // Raquel assumiu a conversa

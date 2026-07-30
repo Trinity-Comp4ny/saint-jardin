@@ -16,7 +16,16 @@ export const MSG = {
     '(se tem preferência por sábado, domingo ou dia de semana) e o número ' +
     'estimado de convidados, por gentileza?!',
 
-  perguntaAno: 'Perfeito! E o evento seria para qual ano, 2027 ou 2028?',
+  perguntaData: 'Você já tem uma data em mente para o evento? ☺️',
+
+  perguntaAno: 'E o evento seria para qual ano, 2027 ou 2028?',
+
+  // Dia de semana com mais de 80 convidados: não cabe no mini. Explicamos o
+  // limite e esperamos a noiva confirmar que quer a proposta normal.
+  explicaLimiteNormal: (convidados: number): string =>
+    `Em dia de semana, nosso formato mini wedding atende até 80 convidados. ` +
+    `Para ${convidados} não se enquadra no mini, mas posso te passar nossa ` +
+    `proposta normal, que também vale para fim de semana. Quer que eu te envie? ☺️`,
 
   orcamentoNormal:
     'Certo, segue PDF com orçamento:\n\n' +

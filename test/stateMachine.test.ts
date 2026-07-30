@@ -73,14 +73,44 @@ describe('fluxo feliz - evento normal', () => {
     expect(r.saidas[0]?.texto).toMatch(/convidados/);
   });
 
-  it('pergunta o ano quando falta para escolher o PDF', () => {
+  it('pergunta a data específica quando falta o que define o ano', () => {
     const r = decidir(
       conversaEm('aguardando_qualificacao'),
       nlu({ slots: { diaSemana: 'sabado', convidados: 200 } }),
       ctx,
     );
+    expect(r.saidas[0]?.texto).toMatch(/data em mente/i);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+  });
+
+  it('pergunta só o ano quando a noiva deu dia/mês sem ano', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 200 }),
+      nlu({ slots: { mesDia: '01-26' } }),
+      ctx,
+    );
     expect(r.saidas[0]?.texto).toMatch(/qual ano/i);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
+  });
+
+  it('avança direto à proposta quando a data completa traz o ano', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 200 }),
+      nlu({ slots: { data: '2028-05-16' } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
+  });
+
+  it('monta a data quando junta dia/mês já dado com o ano informado depois', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 200, mesDia: '01-26' }),
+      nlu({ slots: { ano: 2027 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
   });
 
   it('envia orçamento e PDF do ano quando tudo está completo', () => {
@@ -109,6 +139,41 @@ describe('fluxo mini wedding', () => {
   it('envia orçamento mini quando a noiva aceita', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
+  });
+});
+
+describe('dia de semana acima do limite do mini', () => {
+  it('explica o limite e espera confirmação em vez de mandar a proposta', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao'),
+      nlu({ slots: { preferenciaDia: 'dia_de_semana', convidados: 200 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_confirmacao_normal');
+    expect(r.saidas).toHaveLength(1);
+    expect(r.saidas[0]?.texto).toMatch(/80 convidados/);
+    // não manda PDF antes de confirmar
+    expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
+  });
+
+  it('ao confirmar, segue para a data e depois a proposta', () => {
+    const r = decidir(
+      conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
+      nlu({ afirmativo: true }),
+      ctx,
+    );
+    expect(r.saidas[0]?.texto).toMatch(/data em mente/i);
+    expect(r.conversa.estado).toBe('aguardando_confirmacao_normal');
+  });
+
+  it('se a noiva corrige para até 80, passa a oferecer o mini', () => {
+    const r = decidir(
+      conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
+      nlu({ slots: { convidados: 60 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_interesse_mini');
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
   });
 });

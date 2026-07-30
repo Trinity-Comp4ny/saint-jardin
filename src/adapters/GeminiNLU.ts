@@ -30,6 +30,7 @@ const responseSchema = {
       type: Type.OBJECT,
       properties: {
         data: { type: Type.STRING, nullable: true },
+        mesDia: { type: Type.STRING, nullable: true },
         ano: { type: Type.INTEGER, nullable: true },
         diaSemana: { type: Type.STRING, enum: [...DIAS], nullable: true },
         preferenciaDia: {
@@ -58,6 +59,11 @@ const schema = z.object({
   slots: z
     .object({
       data: z.string().optional(),
+      mesDia: z
+        .string()
+        .regex(/^\d{2}-\d{2}$/)
+        .optional()
+        .catch(undefined),
       ano: z.preprocess(
         (v) => (v === null || v === undefined || v === '' ? undefined : Number(v)),
         z.union([z.literal(2027), z.literal(2028)]).optional(),
@@ -78,6 +84,7 @@ Sua ÚNICA função é LER a mensagem e devolver os dados. Você NUNCA responde 
 
 Extraia (deixe null o que a mensagem não disser):
 - slots.data: data do evento em ISO (yyyy-mm-dd) apenas se houver data completa com dia, mês e ano.
+- slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser só o dia/mês (ex.: "26 de janeiro" -> "01-26"). Deixe null se ela já deu o ano (use data) ou se não citou dia/mês.
 - slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data).
 - slots.diaSemana: o dia da semana exato, se citado (ex.: "sábado" -> sabado, sem acento).
 - slots.preferenciaDia: "fim_de_semana" (sábado/domingo) ou "dia_de_semana" (segunda a sexta),

@@ -2,7 +2,7 @@
 // disponibilidade de data, a decisão da máquina de estados e os efeitos
 // colaterais (enviar mensagens, alertar handoff, persistir).
 
-import { decidir, novaConversa, type ContextoDecisao } from '../domain/stateMachine';
+import { dataCompleta, decidir, novaConversa, type ContextoDecisao } from '../domain/stateMachine';
 import type { Conversa, MensagemSaida } from '../domain/types';
 import type {
   Calendario,
@@ -93,9 +93,14 @@ export async function processarMensagem(
     }
   }
 
-  // 4. Disponibilidade de data, quando há data específica em jogo.
+  // 4. Disponibilidade de data, quando há data específica em jogo (informada
+  // completa, ou dia/mês já combinado com o ano ao longo da conversa).
   const ctx: ContextoDecisao = { agora: deps.agora() };
-  const dataAlvo = nlu.slots.data ?? conversaAtual.slots.data;
+  const dataAlvo = dataCompleta({
+    data: nlu.slots.data ?? conversaAtual.slots.data,
+    mesDia: nlu.slots.mesDia ?? conversaAtual.slots.mesDia,
+    ano: nlu.slots.ano ?? conversaAtual.slots.ano,
+  });
   if (dataAlvo) {
     const livre = await deps.calendario.verificar(dataAlvo);
     ctx.disponibilidadeData = {
