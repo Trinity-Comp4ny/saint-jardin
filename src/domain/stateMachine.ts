@@ -269,8 +269,12 @@ export function decidir(
       };
 
     case 'proposta_enviada':
-      // Orçamento já foi. Qualquer avanço real (visita, negociação) já caiu no
-      // handoff acima. Aqui só reforçamos o convite à visita.
+      // Orçamento já foi e o único convite em aberto é a visita. Um "sim/vamos"
+      // é aceite da visita: precisa da Raquel para agendar de fato.
+      if (nlu.afirmativo) {
+        return handoff('quer agendar visita');
+      }
+      // Sem aceite claro, reforça o convite à visita.
       return { conversa: base, saidas: [texto(MSG.conviteVisita)] };
 
     default:

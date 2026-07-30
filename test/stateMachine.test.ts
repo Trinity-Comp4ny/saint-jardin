@@ -202,6 +202,18 @@ describe('handoff', () => {
     expect(r.conversa.estado).toBe('handoff');
   });
 
+  it('aceite da visita após a proposta transborda para humano', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas).toHaveLength(0);
+  });
+
+  it('sem aceite, reforça o convite à visita', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu(), ctx);
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas[0]?.texto).toMatch(/agendar um dia/i);
+  });
+
   it('cliente já fechado transborda já no primeiro contato', () => {
     const r = decidir(conversaEm('novo'), nlu({ intencao: 'cliente_fechado' }), ctx);
     expect(r.conversa.estado).toBe('handoff');

@@ -64,10 +64,14 @@ const schema = z.object({
         .regex(/^\d{2}-\d{2}$/)
         .optional()
         .catch(undefined),
-      ano: z.preprocess(
-        (v) => (v === null || v === undefined || v === '' ? undefined : Number(v)),
-        z.union([z.literal(2027), z.literal(2028)]).optional(),
-      ),
+      ano: z.preprocess((v) => {
+        if (v === null || v === undefined || v === '') return undefined;
+        const n = Number(v);
+        // "27"/"28" (dois dígitos) valem por 2027/2028.
+        if (n === 27 || n === 2027) return 2027;
+        if (n === 28 || n === 2028) return 2028;
+        return n;
+      }, z.union([z.literal(2027), z.literal(2028)]).optional()),
       diaSemana: z.enum(DIAS).optional(),
       preferenciaDia: z.enum(['fim_de_semana', 'dia_de_semana']).optional(),
       convidados: numeroOpcional,
@@ -85,7 +89,7 @@ Sua ÚNICA função é LER a mensagem e devolver os dados. Você NUNCA responde 
 Extraia (deixe null o que a mensagem não disser):
 - slots.data: data do evento em ISO (yyyy-mm-dd) apenas se houver data completa com dia, mês e ano.
 - slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser só o dia/mês (ex.: "26 de janeiro" -> "01-26"). Deixe null se ela já deu o ano (use data) ou se não citou dia/mês.
-- slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data).
+- slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data). Aceite dois dígitos: "28" -> 2028, "27" -> 2027.
 - slots.diaSemana: o dia da semana exato, se citado (ex.: "sábado" -> sabado, sem acento).
 - slots.preferenciaDia: "fim_de_semana" (sábado/domingo) ou "dia_de_semana" (segunda a sexta),
   quando a pessoa fala de forma genérica sem citar o dia exato.
