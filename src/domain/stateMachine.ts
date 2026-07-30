@@ -26,6 +26,13 @@ export interface DisponibilidadeData {
 export interface ContextoDecisao {
   agora: string;
   disponibilidadeData?: DisponibilidadeData;
+  /** Semente (derivada da mensagem) para variar frases repetidas sem parecer robô. */
+  seed?: number;
+}
+
+/** Escolhe uma variante de forma determinística pela semente da mensagem. */
+function vary(opcoes: readonly string[], seed = 0): string {
+  return opcoes[((seed % opcoes.length) + opcoes.length) % opcoes.length] ?? opcoes[0] ?? '';
 }
 
 export interface ResultadoDecisao {
@@ -97,8 +104,6 @@ function motivoDaIntencao(intencao: EntradaNLU['intencao']): string | null {
   switch (intencao) {
     case 'cliente_fechado':
       return 'cliente que já fechou';
-    case 'agendar_visita':
-      return 'quer agendar visita';
     case 'negociar':
       return 'quer negociar valor ou condição';
     case 'fora_do_script':
@@ -121,8 +126,8 @@ function avancarComData(
   const ano = anoEfetivo(slots);
   if (!ano) {
     // Sem ano ainda: se já temos o dia/mês, falta só o ano; senão, pedimos a data.
-    const pergunta = slots.mesDia ? MSG.perguntaAno : MSG.perguntaData;
-    return { conversa: base, saidas: [texto(pergunta)] };
+    const opcoes = slots.mesDia ? MSG.perguntaAno : MSG.perguntaData;
+    return { conversa: base, saidas: [texto(vary(opcoes, ctx.seed))] };
   }
 
   // Data completa em jogo e ocupada: oferece alternativa.
@@ -213,14 +218,11 @@ export function decidir(
     return fluxoVisitaTecnica(base, slots, ctx);
   }
 
-  // Intenções que exigem humano têm prioridade, exceto na primeira saudação
-  // (queremos ao menos apresentar o espaço antes de transbordar). A visita de
-  // noiva é coletada aqui (proposta_enviada / aguardando_pref_visita), então
-  // "agendar_visita" nesses estados NÃO vira handoff genérico; negociar/fora seguem.
-  const coletandoVisita =
-    conversa.estado === 'proposta_enviada' || conversa.estado === 'aguardando_pref_visita';
+  // Intenções que exigem humano (negociar, fora do script, cliente fechado) têm
+  // prioridade, exceto na primeira saudação (apresentamos o espaço antes). A
+  // visita de noiva NÃO é handoff: é coletada no fluxo (ver casos abaixo).
   const motivo = motivoDaIntencao(nlu.intencao);
-  if (motivo && conversa.estado !== 'novo' && !(nlu.intencao === 'agendar_visita' && coletandoVisita)) {
+  if (motivo && conversa.estado !== 'novo') {
     return handoff(motivo);
   }
   // No primeiro contato, só o caso "cliente já fechado" transborda de imediato.
@@ -242,6 +244,15 @@ export function decidir(
         slots.diaSemana !== undefined ||
         slots.preferenciaDia !== undefined ||
         slots.convidados !== undefined;
+
+      // Só quer conhecer o espaço (sem dados de orçamento): apresenta e já vai
+      // para a preferência de visita, em vez de pedir dados de orçamento.
+      if (nlu.intencao === 'agendar_visita' && !jaVeioAlgumDado) {
+        return {
+          conversa: { ...base, estado: 'aguardando_pref_visita' },
+          saidas: [...apresentacao, texto(MSG.perguntaPreferenciaVisita)],
+        };
+      }
 
       // Nada de útil na 1ª mensagem: faz a pergunta qualificadora completa.
       if (!jaVeioAlgumDado) {
@@ -266,9 +277,17 @@ export function decidir(
         faltando.push('o número estimado de convidados');
       }
       if (faltando.length > 0) {
+        // Se a noiva quer visitar e ainda não deu dados de orçamento, conduz para
+        // a preferência de visita em vez de insistir na qualificação.
+        if (nlu.intencao === 'agendar_visita') {
+          return {
+            conversa: { ...base, estado: 'aguardando_pref_visita' },
+            saidas: [texto(MSG.perguntaPreferenciaVisita)],
+          };
+        }
         return {
           conversa: base,
-          saidas: [texto(MSG.pedirDadosFaltantes(faltando))],
+          saidas: [texto(MSG.pedirDadosFaltantes(faltando, ctx.seed))],
         };
       }
 

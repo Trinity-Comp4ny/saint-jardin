@@ -189,7 +189,43 @@ describe('dia de semana acima do limite do mini', () => {
   });
 });
 
+describe('variação de frases (anti-repetição)', () => {
+  it('sementes diferentes geram perguntas de dados diferentes', () => {
+    const base = conversaEm('aguardando_qualificacao');
+    const a = decidir(base, nlu({ slots: { diaSemana: 'sabado' } }), { agora: AGORA, seed: 0 });
+    const b = decidir(base, nlu({ slots: { diaSemana: 'sabado' } }), { agora: AGORA, seed: 1 });
+    expect(a.saidas[0]?.texto).not.toBe(b.saidas[0]?.texto);
+    expect(a.saidas[0]?.texto).toMatch(/convidados/);
+    expect(b.saidas[0]?.texto).toMatch(/convidados/);
+  });
+
+  it('sementes diferentes geram perguntas de data diferentes', () => {
+    const base = conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 100 });
+    const a = decidir(base, nlu(), { agora: AGORA, seed: 0 });
+    const b = decidir(base, nlu(), { agora: AGORA, seed: 2 });
+    expect(a.saidas[0]?.texto).not.toBe(b.saidas[0]?.texto);
+  });
+});
+
 describe('visita de noiva (coleta e repassa)', () => {
+  it('só quer visitar (sem dados) apresenta e vai à preferência de visita', () => {
+    const r = decidir(conversaEm('novo'), nlu({ intencao: 'agendar_visita' }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'apresentacao')).toBe(true);
+    expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
+  });
+
+  it('orçamento + visita na primeira mensagem envia a proposta (não handoff silencioso)', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'agendar_visita', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2027')).toBe(true);
+    expect(r.saidas.length).toBeGreaterThan(0);
+  });
+
   it('aceite da visita pergunta a preferência de dia', () => {
     const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
@@ -282,11 +318,10 @@ describe('handoff', () => {
     expect(r.saidas).toHaveLength(0);
   });
 
-  it('transborda quando quer agendar visita fora do fluxo de visita', () => {
-    // Em proposta_enviada/aguardando_pref_visita a visita é coletada; nos demais
-    // estados, "quer agendar visita" ainda é handoff.
+  it('quer agendar visita sem dados de orçamento conduz à preferência (não handoff)', () => {
     const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ intencao: 'agendar_visita' }), ctx);
-    expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
   });
 
   it('sem aceite, reforça o convite à visita', () => {

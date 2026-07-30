@@ -267,6 +267,41 @@ const CENARIOS: Cenario[] = [
   { nome: 'responde outra coisa', categoria: 'ambíguo', mensagens: ['oi', 'quanto custa?', 'sábado', 'ah, 150 pessoas', '2027'] },
   { nome: 'sim isolado', categoria: 'ambíguo', mensagens: ['oi', 'sim'] },
   { nome: 'não sei ainda', categoria: 'ambíguo', mensagens: ['oi', 'ainda não sei a data nem quantas pessoas'] },
+
+  // ── Extremos numéricos ───────────────────────────────────────────────
+  { nome: '5000 convidados', categoria: 'extremo', mensagens: ['oi', 'sábado, 5000 pessoas, 2027'] },
+  { nome: '2 convidados', categoria: 'extremo', mensagens: ['oi', 'quero um dia de semana só pra 2 pessoas'] },
+  { nome: 'número por extenso', categoria: 'extremo', mensagens: ['oi', 'sábado, cento e cinquenta convidados, 2027'] },
+
+  // ── Datas estranhas / fora de range ──────────────────────────────────
+  { nome: 'ano fora do range (2030)', categoria: 'data-extrema', mensagens: ['oi', 'sábado, 100 pessoas', 'quero em 2030'] },
+  { nome: 'ano corrente (2026)', categoria: 'data-extrema', mensagens: ['oi', 'sábado, 100 pessoas', 'esse ano ainda, 2026'] },
+  { nome: 'data passada', categoria: 'data-extrema', mensagens: ['oi', 'sábado 100 pessoas', '10 de janeiro de 2020'] },
+  { nome: 'data impossível 31/02', categoria: 'data-extrema', mensagens: ['oi', 'sábado 100 pessoas', '31 de fevereiro de 2027'] },
+  { nome: 'data vaga (mês que vem)', categoria: 'data-extrema', mensagens: ['oi', 'sábado 100 pessoas', 'mês que vem'] },
+
+  // ── Hostil / ruído / spam ────────────────────────────────────────────
+  { nome: 'mensagem hostil', categoria: 'hostil', mensagens: ['oi', 'vocês são muito caros e ruins'] },
+  { nome: 'teclado aleatório', categoria: 'hostil', mensagens: ['oi', 'asdfghjkl kkkk'] },
+  { nome: 'quer cancelar', categoria: 'hostil', mensagens: ['oi', 'quero cancelar tudo'] },
+  { nome: 'vazio-ish', categoria: 'hostil', mensagens: ['oi', '...'] },
+
+  // ── Correções em cadeia (anti-repetição) ─────────────────────────────
+  { nome: 'três correções de dia', categoria: 'correções', mensagens: ['oi', 'sábado, 150', 'não, domingo', 'na verdade sexta', '2027'] },
+  { nome: 'três ruídos seguidos', categoria: 'correções', mensagens: ['oi', 'bom dia', 'tudo bem?', 'então...'] },
+
+  // ── Idioma / formato ─────────────────────────────────────────────────
+  { nome: 'inglês', categoria: 'idioma', mensagens: ['hi, do you host weddings on a saturday for 100 guests in 2027?'] },
+  { nome: 'espanhol', categoria: 'idioma', mensagens: ['hola, quiero casarme un sábado con 120 invitados en 2028'] },
+
+  // ── Orçamento + visita / só visita ───────────────────────────────────
+  { nome: 'orçamento + visita (1a msg)', categoria: 'misto', mensagens: ['oi, quero o valor pra 150 num sábado de 2027 e já marcar uma visita'], estadoFinalEsperado: 'proposta_enviada' },
+  { nome: 'só quero visitar', categoria: 'misto', mensagens: ['oi, só quero conhecer o espaço, posso visitar?'] },
+  { nome: 'negociar logo no início', categoria: 'misto', mensagens: ['oi, vocês fazem desconto pra pagamento à vista?'] },
+
+  // ── Visita técnica variações ─────────────────────────────────────────
+  { nome: 'técnica dia/mês sem ano', categoria: 'visita-tecnica', mensagens: ['sou fornecedora, quero visita técnica dia 20 de outubro'] },
+  { nome: 'técnica hoje/amanhã', categoria: 'visita-tecnica', mensagens: ['preciso de uma visita técnica amanhã'] },
 ];
 
 async function main(): Promise<void> {

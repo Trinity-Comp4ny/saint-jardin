@@ -93,9 +93,14 @@ export async function processarMensagem(
     }
   }
 
+  // Semente para variar frases repetidas: derivada da mensagem, então respostas
+  // diferentes da noiva geram variantes diferentes, sem repetir a mesma frase.
+  let seed = 0;
+  for (const ch of texto) seed = (seed * 31 + ch.charCodeAt(0)) >>> 0;
+
   // 4. Disponibilidade de data, quando há data específica em jogo (informada
   // completa, ou dia/mês já combinado com o ano ao longo da conversa).
-  const ctx: ContextoDecisao = { agora: deps.agora() };
+  const ctx: ContextoDecisao = { agora: deps.agora(), seed };
   const dataAlvo = dataCompleta({
     data: nlu.slots.data ?? conversaAtual.slots.data,
     mesDia: nlu.slots.mesDia ?? conversaAtual.slots.mesDia,

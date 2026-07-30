@@ -16,9 +16,18 @@ export const MSG = {
     '(se tem preferência por sábado, domingo ou dia de semana) e o número ' +
     'estimado de convidados, por gentileza?!',
 
-  perguntaData: 'Você já tem uma data em mente para o evento? ☺️',
+  // Variantes: escolhidas por um seed da mensagem, para não repetir a mesma
+  // frase quando a noiva responde algo que não avança (a 1ª é a "canônica").
+  perguntaData: [
+    'Você já tem uma data em mente para o evento? ☺️',
+    'E sobre a data, já tem algum dia pensado? 😊',
+    'Me conta: você já escolheu a data ou ainda está decidindo?',
+  ],
 
-  perguntaAno: 'E o evento seria para qual ano, 2027 ou 2028?',
+  perguntaAno: [
+    'E o evento seria para qual ano, 2027 ou 2028?',
+    'Só me confirma o ano, por favor: 2027 ou 2028? ☺️',
+  ],
 
   // Dia de semana com mais de 80 convidados: não cabe no mini. Explicamos o
   // limite e esperamos a noiva confirmar que quer a proposta normal.
@@ -76,10 +85,14 @@ export const MSG = {
   visitaTecnicaVouVerificar:
     'Perfeito! Vou verificar a disponibilidade e já te retorno, tá? ☺️',
 
-  pedirDadosFaltantes: (faltando: string[]): string =>
-    `Só pra eu montar seu orçamento certinho, você pode me confirmar ${faltando.join(
-      ' e ',
-    )}? ☺️`,
+  pedirDadosFaltantes: (faltando: string[], i = 0): string => {
+    const o = faltando.join(' e ');
+    return [
+      `Só pra eu montar seu orçamento certinho, você pode me confirmar ${o}? ☺️`,
+      `Perfeito! Pra fechar seu orçamento, me confirma ${o}? 😊`,
+      `Legal! Só preciso saber ${o} pra seguir com seu orçamento. ☺️`,
+    ][i % 3] as string;
+  },
 
   dataIndisponivel: (data: string, alternativa: string): string =>
     `Poxa, a data ${data} já está reservada. 😕 Consigo te oferecer ${alternativa}. ` +

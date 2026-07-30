@@ -31,17 +31,30 @@ não era "afirmativo", então o bot **repetia a explicação do limite** em loop
 Corrigido com o estado `aguardando_data_normal`: depois do "sim", o fluxo só coleta
 data/ano e envia a proposta, sem re-explicar.
 
-### 3. Repetição da pergunta ao mudar um dado — PENDENTE (UX)
-Quando a noiva corrige um dado ("sábado 200" → "ah não, melhor domingo"), o bot
-repete a **mesma** pergunta de data, palavra por palavra. Não quebra o fluxo (chega à
-proposta), mas soa robótico. Melhoria: variar a frase / reconhecer a correção.
+### 3. Repetição da pergunta ao mudar um dado — CORRIGIDO (parcial)
+As perguntas repetíveis (dados faltantes, data, ano) agora têm variantes, escolhidas
+por uma semente derivada da mensagem (`ctx.seed`, sem persistir nada). Respostas
+diferentes da noiva geram frases diferentes. Limitação: com 3 variantes, duas
+respostas seguidas ainda colidem em ~⅓ dos casos (ex.: mudar de dia duas vezes). Se
+incomodar, aumentar o número de variantes ou usar um contador persistido.
 
-### 4. "Orçamento + visita" na 1ª mensagem → handoff silencioso — PENDENTE (UX/produto)
-Mensagem como "quero o valor pra 150 num sábado de 2027 e já marcar uma visita" cai
-direto em handoff (intenção `agendar_visita`), **sem apresentar o espaço, sem a
-proposta e sem nenhuma resposta à noiva** — só a Raquel é avisada. Opção: mandar a
-apresentação/proposta primeiro (ela deu todos os dados) e/ou uma mensagem-ponte antes
-de transbordar. Ligado ao tema do "handoff silencioso".
+### 4. "Orçamento + visita" e "só visita" — CORRIGIDO
+`agendar_visita` deixou de ser handoff genérico. Agora:
+- Mensagem com dados + visita ("valor pra 150 num sábado de 2027 e marcar visita")
+  segue o fluxo normal e **envia a proposta** (o convite à visita fecha a mensagem).
+- "Só quero conhecer o espaço" (sem dados) **apresenta e vai à preferência de visita**,
+  em vez de pedir dados de orçamento.
+Nenhum dos dois cai mais em handoff silencioso.
+
+## Observações (não são bugs — decisão de produto)
+
+- **Capacidade**: "5000 convidados" gera a proposta normal sem ressalva (o PDF cita até
+  200). Se a Raquel quiser um limite, dá para transbordar acima de X convidados.
+- **Idiomas**: inglês e espanhol são entendidos e respondidos em português. OK para o
+  público, mas vale a Raquel saber.
+- **Hostil / cancelar**: caem em `fora_do_script` → handoff (humano assume). Adequado.
+- **Data passada / ano fora de 2027-2028**: não trava (o ano inválido é ignorado); o
+  bot volta a pedir o ano. Não há aviso de "data no passado".
 
 ## O que está sólido (passou sem ressalva)
 
