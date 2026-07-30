@@ -7,9 +7,10 @@ import { z } from 'zod';
 import type { NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
 
-// Alias "-latest": aponta sempre para o flash estável mais recente, evitando
-// que o modelo seja descontinuado (versões pinadas antigas sofrem EOL).
-const MODELO = 'gemini-flash-latest';
+// Flash-lite: mais barato e sem "thinking" por padrão (a extração é uma tarefa
+// simples e determinística, não precisa raciocínio). ~10x mais barato e ~3x mais
+// rápido que o flash com thinking. Alias "-latest" evita EOL de versão pinada.
+const MODELO = 'gemini-flash-lite-latest';
 
 const DIAS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado', 'domingo'] as const;
 const INTENCOES = [
@@ -111,9 +112,8 @@ export class GeminiNLU implements NLU {
         responseMimeType: 'application/json',
         responseSchema,
         temperature: 0,
-        // Flash recentes têm "thinking" ligado e consomem tokens raciocinando;
-        // damos folga para não truncar o JSON (finishReason MAX_TOKENS).
-        maxOutputTokens: 2048,
+        // O flash-lite não usa thinking, então basta caber o JSON de saída.
+        maxOutputTokens: 512,
       },
     });
 
