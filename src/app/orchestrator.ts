@@ -31,6 +31,17 @@ export interface ResultadoProcessamento {
   saidas: MensagemSaida[];
 }
 
+// O alerta de handoff (Telegram) NUNCA deve derrubar o atendimento: se o canal
+// falhar ou não estiver configurado, o handoff já está persistido no banco e
+// continua visível. Best-effort.
+async function alertarSeguro(deps: Deps, conversa: Conversa, motivo: string): Promise<void> {
+  try {
+    await deps.notifier.alertarHandoff(conversa, motivo);
+  } catch {
+    // handoff permanece registrado; o alerta é reenviável (watchdog futuro).
+  }
+}
+
 async function transbordar(
   deps: Deps,
   conversa: Conversa,
@@ -42,8 +53,8 @@ async function transbordar(
     motivoHandoff: motivo,
     atualizadoEm: deps.agora(),
   };
-  await deps.notifier.alertarHandoff(atualizada, motivo);
   await deps.conversas.salvar(atualizada);
+  await alertarSeguro(deps, atualizada, motivo);
   return { conversa: atualizada, saidas: [] };
 }
 
@@ -109,11 +120,11 @@ export async function processarMensagem(
       );
     }
   }
+  await deps.conversas.salvar(conversa);
   // conversaAtual nunca é 'handoff' aqui (guardado no topo), então basta olhar o novo estado.
   if (conversa.estado === 'handoff') {
-    await deps.notifier.alertarHandoff(conversa, conversa.motivoHandoff ?? 'handoff');
+    await alertarSeguro(deps, conversa, conversa.motivoHandoff ?? 'handoff');
   }
-  await deps.conversas.salvar(conversa);
 
   return { conversa, saidas };
 }
