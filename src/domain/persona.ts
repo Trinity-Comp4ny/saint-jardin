@@ -69,14 +69,14 @@ export const MSG = {
     'Vamos agendar um dia para você conhecer nossa estrutura e analisar a ' +
     'experiência que oferecemos no Saint Jardin?',
 
-  // Visita de noiva: o bot coleta a preferência e repassa para a Raquel marcar.
-  // A própria Raquel confere a agenda dela e retorna (não "a equipe").
+  // Visita de noiva: PRIMEIRO só pergunta o melhor dia/horário para a noiva
+  // (sem prometer a agenda ainda). Só DEPOIS que ela responde é que a Raquel
+  // diz que vai verificar a própria agenda (visitaVouRetornar).
   perguntaPreferenciaVisita:
-    'Que ótimo! ☺️ Tem algum dia ou horário que fica melhor para você? ' +
-    'Vou verificar minha agenda e já te confirmo.',
+    'Você tem algum dia ou horário de preferência para fazer a visita?',
 
   visitaVouRetornar:
-    'Perfeito! Vou verificar minha agenda e já te retorno para combinarmos, tá? ☺️',
+    'Vou verificar minha agenda para esse dia e já te retorno para combinarmos, tá?',
 
   // Visita técnica (fornecedor de casamento fechado): regra e validação.
   perguntaDataVisitaTecnica:
