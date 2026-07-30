@@ -140,6 +140,9 @@ describe('fluxo mini wedding', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
+    // o preço (literal da Raquel) vai no texto do mini, não em PDF
+    expect(r.saidas[0]?.texto).toMatch(/27\.900/);
+    expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
   });
 });
 

@@ -50,6 +50,8 @@ export const MSG = {
     'de semana (segunda a quinta-feira, exceto feriados ou vésperas). Teria ' +
     'interesse em receber?',
 
+  // Texto literal da Raquel (_chat.txt). Ao contrário do evento normal, o mini
+  // wedding não tem PDF: o preço vai na própria mensagem.
   orcamentoMini:
     'Certo, segue orçamento para mini wedding:\n\n' +
     'Oferecemos aos clientes 6h de evento.\n' +
@@ -57,7 +59,11 @@ export const MSG = {
     '1 funcionário no dia do evento, um salão com ar Toscano da Itália bem em ' +
     'frente a nossa linda Capela, além de três opções de áreas de cerimônia.\n\n' +
     '*proposta válida para eventos de segunda a quinta-feira (exceto feriados ' +
-    'e vésperas de feriado), com limite máximo de 65 convidados.',
+    'e vésperas de feriado), com limite máximo de 65 convidados.\n\n' +
+    'O investimento para sua data é a partir de R$27.900,00 para 2027 ou ' +
+    'R$29.900,00 para 2028.\n\n' +
+    'Também posso oferecer alguns pacotes de hospedagem personalizados e ' +
+    'exclusivos na visita para entender qual proposta mais se adequa ao seu evento.',
 
   conviteVisita:
     'Vamos agendar um dia para você conhecer nossa estrutura e analisar a ' +
