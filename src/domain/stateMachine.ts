@@ -51,12 +51,16 @@ export function classificarDia(slots: Slots): PreferenciaDia | undefined {
   return slots.preferenciaDia;
 }
 
-/** Regra de negócio: quando o evento cai em mini wedding. */
+/**
+ * Regra de negócio (confirmada com a Raquel): mini wedding é SÓ dia de semana
+ * (seg-qui) E até 80 convidados. Fim de semana com poucos convidados, ou dia de
+ * semana com mais de 80, vão para o valor normal — não se enquadram no mini.
+ */
 export function ehMiniWedding(slots: Slots): boolean {
   const dia = classificarDia(slots);
-  const poucosConvidados =
-    slots.convidados !== undefined && slots.convidados < LIMITE_MINI_WEDDING;
-  return dia === 'dia_de_semana' || poucosConvidados;
+  const cabeNoMini =
+    slots.convidados !== undefined && slots.convidados <= LIMITE_MINI_WEDDING;
+  return dia === 'dia_de_semana' && cabeNoMini;
 }
 
 function mesclarSlots(atual: Slots, novo: Slots): Slots {

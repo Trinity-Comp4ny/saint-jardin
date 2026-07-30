@@ -27,9 +27,13 @@ describe('regras de negócio', () => {
     expect(classificarDia({})).toBeUndefined();
   });
 
-  it('é mini wedding em dia de semana ou com menos de 80 convidados', () => {
-    expect(ehMiniWedding({ diaSemana: 'quarta', convidados: 200 })).toBe(true);
-    expect(ehMiniWedding({ diaSemana: 'sabado', convidados: 50 })).toBe(true);
+  it('mini wedding é só dia de semana E até 80 convidados', () => {
+    expect(ehMiniWedding({ diaSemana: 'quarta', convidados: 60 })).toBe(true);
+    expect(ehMiniWedding({ diaSemana: 'quarta', convidados: 80 })).toBe(true);
+    // dia de semana com mais de 80 -> valor normal, não mini
+    expect(ehMiniWedding({ diaSemana: 'quarta', convidados: 200 })).toBe(false);
+    // fim de semana nunca é mini, mesmo com poucos convidados
+    expect(ehMiniWedding({ diaSemana: 'sabado', convidados: 50 })).toBe(false);
     expect(ehMiniWedding({ diaSemana: 'sabado', convidados: 200 })).toBe(false);
   });
 });
