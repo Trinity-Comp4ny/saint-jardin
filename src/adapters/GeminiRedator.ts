@@ -8,6 +8,13 @@ import type { Redator } from '../ports';
 
 const MODELO = 'gemini-flash-lite-latest';
 
+/** Garante inicial maiúscula (o modelo às vezes devolve "boa tarde"). */
+export function capitalizar(t: string): string {
+  const i = t.search(/\p{L}/u); // primeira letra (ignora emoji/pontuação inicial)
+  if (i === -1) return t;
+  return t.slice(0, i) + t.charAt(i).toUpperCase() + t.slice(i + 1);
+}
+
 const SYSTEM = `Você é a Raquel, atendente do Saint Jardin (espaço para casamentos). Fale como uma pessoa real no WhatsApp: gentil, natural, sem soar de robô.
 Você recebe: a última mensagem do cliente e um OBJETIVO (o que você precisa comunicar agora).
 Reescreva o OBJETIVO de forma humana:
@@ -48,8 +55,8 @@ export class GeminiRedator implements Redator {
         },
       });
       const t = (resp.text ?? '').trim().replace(/^["']|["']$/g, '');
-      // Fallback: se vier vazio, usa o texto-objetivo literal.
-      return t || entrada.objetivo;
+      // Fallback: se vier vazio, usa o texto-objetivo literal. Sempre capitaliza.
+      return capitalizar(t || entrada.objetivo);
     } catch {
       // A redação é best-effort: qualquer falha cai no texto fixo original.
       return entrada.objetivo;
