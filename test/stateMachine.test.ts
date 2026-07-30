@@ -157,14 +157,25 @@ describe('dia de semana acima do limite do mini', () => {
     expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
   });
 
-  it('ao confirmar, segue para a data e depois a proposta', () => {
+  it('ao confirmar, pergunta a data e passa para aguardando_data_normal', () => {
     const r = decidir(
       conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
       nlu({ afirmativo: true }),
       ctx,
     );
     expect(r.saidas[0]?.texto).toMatch(/data em mente/i);
-    expect(r.conversa.estado).toBe('aguardando_confirmacao_normal');
+    expect(r.conversa.estado).toBe('aguardando_data_normal');
+  });
+
+  it('confirmado, o ano na sequência gera a proposta (sem repetir a explicação)', () => {
+    const r = decidir(
+      conversaEm('aguardando_data_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
+      nlu({ slots: { ano: 2027 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
+    expect(r.saidas.some((s) => /mini wedding/i.test(s.texto ?? ''))).toBe(false);
   });
 
   it('se a noiva corrige para até 80, passa a oferecer o mini', () => {

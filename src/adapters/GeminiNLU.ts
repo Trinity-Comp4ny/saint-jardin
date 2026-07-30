@@ -60,10 +60,12 @@ const responseSchema = {
 } as const;
 
 // Coerção tolerante: o LLM às vezes manda número como string ("2027").
-const numeroOpcional = z.preprocess(
-  (v) => (v === null || v === undefined || v === '' ? undefined : Number(v)),
-  z.number().optional(),
-);
+const numeroOpcional = z
+  .preprocess(
+    (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? undefined : Number(v)),
+    z.number().optional(),
+  )
+  .catch(undefined);
 
 const schema = z.object({
   slots: z
@@ -74,14 +76,19 @@ const schema = z.object({
         .regex(/^\d{2}-\d{2}$/)
         .optional()
         .catch(undefined),
-      ano: z.preprocess((v) => {
-        if (v === null || v === undefined || v === '') return undefined;
-        const n = Number(v);
-        // "27"/"28" (dois dígitos) valem por 2027/2028.
-        if (n === 27 || n === 2027) return 2027;
-        if (n === 28 || n === 2028) return 2028;
-        return n;
-      }, z.union([z.literal(2027), z.literal(2028)]).optional()),
+      // Ano fora de 2027/2028 (o modelo às vezes devolve 2026, 2029, etc.) vira
+      // undefined em vez de derrubar todo o parse — a máquina de estados então
+      // pergunta o ano normalmente. `.catch` é a rede de segurança.
+      ano: z
+        .preprocess((v) => {
+          if (v === null || v === undefined || v === '') return undefined;
+          const n = Number(v);
+          // "27"/"28" (dois dígitos) valem por 2027/2028.
+          if (n === 27 || n === 2027) return 2027;
+          if (n === 28 || n === 2028) return 2028;
+          return n;
+        }, z.union([z.literal(2027), z.literal(2028)]).optional())
+        .catch(undefined),
       diaSemana: z.enum(DIAS).optional(),
       preferenciaDia: z.enum(['fim_de_semana', 'dia_de_semana']).optional(),
       convidados: numeroOpcional,
@@ -153,7 +160,10 @@ export class GeminiNLU implements NLU {
     });
 
     const json = limparNulos(extrairJson(resp.text ?? '{}'));
-    return schema.parse(json) as EntradaNLU;
+    // Rede final: um retorno inesperado do modelo nunca deve travar a conversa.
+    // Se o parse falhar mesmo com os campos tolerantes, degrada para "seguir_fluxo".
+    const parsed = schema.safeParse(json);
+    return (parsed.success ? parsed.data : { slots: {}, intencao: 'seguir_fluxo' }) as EntradaNLU;
   }
 }
 

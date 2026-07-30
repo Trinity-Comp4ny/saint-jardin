@@ -301,7 +301,10 @@ export function decidir(
         };
       }
       if (nlu.afirmativo) {
-        return avancarComData(base, slots, ctx);
+        // Confirmou: daqui é só coletar data/ano e mandar a proposta. Transiciona
+        // para um estado próprio para não voltar à qualificação (que re-explicaria
+        // o limite) nem repetir a explicação a cada resposta que não seja "sim".
+        return avancarComData({ ...base, estado: 'aguardando_data_normal' }, slots, ctx);
       }
       // Sem "sim" claro: reforça o convite à proposta, sem mandar o PDF ainda.
       return {
@@ -309,6 +312,10 @@ export function decidir(
         saidas: [texto(MSG.explicaLimiteNormal(slots.convidados ?? LIMITE_MINI_WEDDING))],
       };
     }
+
+    case 'aguardando_data_normal':
+      // Proposta normal já confirmada: só falta a data/ano para escolher o PDF.
+      return avancarComData(base, slots, ctx);
 
     case 'aguardando_interesse_mini':
       if (nlu.afirmativo) {

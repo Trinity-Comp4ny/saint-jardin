@@ -51,6 +51,8 @@ export type EstadoConversa =
   // dia de semana com mais de 80 convidados: explicamos que não cabe no mini e
   // esperamos a noiva confirmar que quer receber a proposta normal.
   | 'aguardando_confirmacao_normal'
+  // Confirmou a proposta normal (dia de semana > 80): agora só coletar data/ano.
+  | 'aguardando_data_normal'
   | 'proposta_enviada'
   // Visita (ADR-0005 rev. 30/07): o bot coleta e repassa; não marca.
   | 'aguardando_pref_visita' // noiva aceitou; coletando dia de preferência
