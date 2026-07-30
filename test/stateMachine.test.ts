@@ -192,6 +192,30 @@ describe('dia de semana acima do limite do mini', () => {
   });
 });
 
+describe('humanização (flag)', () => {
+  it('a pergunta qualificadora é humanizável', () => {
+    const r = decidir(conversaEm('novo'), nlu(), ctx);
+    const q = r.saidas.find((s) => s.tipo === 'texto' && /convidados/.test(s.texto ?? ''));
+    expect(q?.humanizar).toBe(true);
+  });
+
+  it('o orçamento (com preço) NÃO é humanizável', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 100, ano: 2027 }),
+      nlu(),
+      ctx,
+    );
+    const orc = r.saidas.find((s) => s.tipo === 'texto' && /Oferecemos/.test(s.texto ?? ''));
+    expect(orc?.humanizar).toBeFalsy();
+  });
+
+  it('o orçamento mini (com preço) NÃO é humanizável', () => {
+    const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
+    const mini = r.saidas.find((s) => /27\.900/.test(s.texto ?? ''));
+    expect(mini?.humanizar).toBeFalsy();
+  });
+});
+
 describe('variação de frases (anti-repetição)', () => {
   it('sementes diferentes geram perguntas de dados diferentes', () => {
     const base = conversaEm('aguardando_qualificacao');

@@ -123,8 +123,8 @@ Extraia (deixe null o que a mensagem não disser):
   - "agendar_visita": a noiva/cliente quer conhecer o espaço (visita normal).
   - "visita_tecnica": é um FORNECEDOR (buffet, decorador, assessoria) de um casamento já fechado querendo fazer uma VISITA TÉCNICA no espaço. Use só quando a pessoa fala explicitamente em "visita técnica" ou se identifica como fornecedor de um evento.
   - "negociar": quer desconto, parcelamento ou mudar condição de valor.
-  - "fora_do_script": pergunta que foge do primeiro atendimento padrão.
-  - "seguir_fluxo": caso geral (informa dados, cumprimenta, pede orçamento).
+  - "fora_do_script": uma PERGUNTA concreta que foge do atendimento padrão (ex.: "tem buffet?", "tem estacionamento?", "qual o endereço?", "aceita pet?"). NÃO use para saudações, agradecimentos, nem quando a pessoa só diz que vai responder, pede um minuto ou manda uma mensagem social — isso é "seguir_fluxo".
+  - "seguir_fluxo": caso geral. Inclui informar dados, cumprimentar, agradecer, dizer que vai mandar as informações, pedir um minuto/momento, ou pedir orçamento.
 - afirmativo: true se for uma resposta positiva (sim, quero, pode mandar).
 - visita: SÓ quando o estado for "aguardando_pref_visita" (a noiva está dizendo que dia prefere para a visita ao espaço). Preencha:
   - visita.diaSemana: dia da semana que ela prefere (ex.: "quinta" -> quinta).

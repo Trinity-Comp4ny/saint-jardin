@@ -12,6 +12,7 @@ import type {
   MessagingProvider,
   Notifier,
   NLU,
+  Redator,
 } from '../ports';
 
 export interface Deps {
@@ -19,6 +20,8 @@ export interface Deps {
   conversas: ConversaRepository;
   nlu: NLU;
   calendario: Calendario;
+  /** Redação humanizada das perguntas/convites (opcional). Ausente = texto literal. */
+  redator?: Redator;
   messaging: MessagingProvider;
   notifier: Notifier;
   agora: () => string;
@@ -40,6 +43,26 @@ async function alertarSeguro(deps: Deps, conversa: Conversa, motivo: string): Pr
   } catch {
     // handoff permanece registrado; o alerta é reenviável (watchdog futuro).
   }
+}
+
+/**
+ * Reescreve as saídas marcadas com `humanizar` na voz da Raquel, respondendo o
+ * small talk do cliente. As demais (preço, proposta, regra, PDF) vão intactas.
+ * Best-effort: sem redator ou em caso de falha, mantém o texto original.
+ */
+async function humanizarSaidas(
+  deps: Deps,
+  saidas: MensagemSaida[],
+  mensagemCliente: string,
+): Promise<MensagemSaida[]> {
+  if (!deps.redator) return saidas;
+  return Promise.all(
+    saidas.map(async (s) => {
+      if (s.tipo !== 'texto' || !s.humanizar || !s.texto) return s;
+      const texto = await deps.redator!.humanizar({ objetivo: s.texto, mensagemCliente });
+      return { ...s, texto };
+    }),
+  );
 }
 
 async function transbordar(
@@ -118,10 +141,12 @@ export async function processarMensagem(
   // 5. Decisão determinística.
   const { conversa, saidas } = decidir(conversaAtual, nlu, ctx);
 
-  // 6. Efeitos colaterais de mensagem.
-  if (saidas.length > 0) {
-    await deps.messaging.enviar(telefone, saidas);
-    for (const s of saidas) {
+  // 6. Efeitos de mensagem. Antes de enviar, humaniza as perguntas marcadas
+  // (só as conversacionais; preço/proposta/regra vão literais).
+  const saidasFinais = await humanizarSaidas(deps, saidas, texto);
+  if (saidasFinais.length > 0) {
+    await deps.messaging.enviar(telefone, saidasFinais);
+    for (const s of saidasFinais) {
       await deps.mensagens?.registrar(
         telefone,
         'saida',
@@ -137,5 +162,5 @@ export async function processarMensagem(
     await alertarSeguro(deps, conversa, conversa.motivoHandoff ?? 'handoff');
   }
 
-  return { conversa, saidas };
+  return { conversa, saidas: saidasFinais };
 }

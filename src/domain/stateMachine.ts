@@ -41,6 +41,9 @@ export interface ResultadoDecisao {
 }
 
 const texto = (t: string): MensagemSaida => ({ tipo: 'texto', texto: t });
+// Texto conversacional (pergunta/convite): a redação pode humanizar. Nunca usar
+// para mensagens com preço, proposta ou regra — essas ficam com `texto`.
+const pergunta = (t: string): MensagemSaida => ({ tipo: 'texto', texto: t, humanizar: true });
 
 export function novaConversa(telefone: string, agora: string): Conversa {
   return {
@@ -136,13 +139,13 @@ function avancarComData(
   if (!ano) {
     // Sem ano ainda: se já temos o dia/mês, falta só o ano; senão, pedimos a data.
     const opcoes = slots.mesDia ? MSG.perguntaAno : MSG.perguntaData;
-    return { conversa: base, saidas: [texto(vary(opcoes, ctx.seed))] };
+    return { conversa: base, saidas: [pergunta(vary(opcoes, ctx.seed))] };
   }
 
   const dataISO = dataCompleta(slots);
   // Data específica já no passado: avisa e pede uma data futura.
   if (dataISO && dataNoPassado(dataISO, ctx.agora)) {
-    return { conversa: base, saidas: [texto(vary(MSG.dataNoPassado, ctx.seed))] };
+    return { conversa: base, saidas: [pergunta(vary(MSG.dataNoPassado, ctx.seed))] };
   }
 
   // Data completa em jogo e ocupada: oferece alternativa.
@@ -159,7 +162,7 @@ function avancarComData(
     saidas: [
       texto(MSG.orcamentoNormal),
       { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
-      texto(MSG.conviteVisita),
+      pergunta(MSG.conviteVisita),
     ],
   };
 }
@@ -188,7 +191,7 @@ function fluxoVisitaTecnica(
   if (!dataISO) {
     return {
       conversa: { ...base, estado: 'visita_tecnica_data' },
-      saidas: [texto(MSG.perguntaDataVisitaTecnica)],
+      saidas: [pergunta(MSG.perguntaDataVisitaTecnica)],
     };
   }
   const validacao = validarVisitaTecnica(dataISO, ctx.agora);
@@ -205,7 +208,7 @@ function fluxoVisitaTecnica(
       estado: 'handoff',
       motivoHandoff: `visita técnica: ${descreverData(dataISO)}`,
     },
-    saidas: [texto(MSG.visitaTecnicaVouVerificar)],
+    saidas: [pergunta(MSG.visitaTecnicaVouVerificar)],
   };
 }
 
@@ -264,7 +267,7 @@ export function decidir(
       if (nlu.intencao === 'agendar_visita' && !jaVeioAlgumDado) {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
-          saidas: [...apresentacao, texto(MSG.perguntaPreferenciaVisita)],
+          saidas: [...apresentacao, pergunta(MSG.perguntaPreferenciaVisita)],
         };
       }
 
@@ -272,7 +275,7 @@ export function decidir(
       if (!jaVeioAlgumDado) {
         return {
           conversa: { ...base, estado: 'aguardando_qualificacao' },
-          saidas: [...apresentacao, texto(MSG.perguntaQualificadora)],
+          saidas: [...apresentacao, pergunta(MSG.perguntaQualificadora)],
         };
       }
 
@@ -296,12 +299,12 @@ export function decidir(
         if (nlu.intencao === 'agendar_visita') {
           return {
             conversa: { ...base, estado: 'aguardando_pref_visita' },
-            saidas: [texto(MSG.perguntaPreferenciaVisita)],
+            saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
           };
         }
         return {
           conversa: base,
-          saidas: [texto(MSG.pedirDadosFaltantes(faltando, ctx.seed))],
+          saidas: [pergunta(MSG.pedirDadosFaltantes(faltando, ctx.seed))],
         };
       }
 
@@ -354,13 +357,13 @@ export function decidir(
       if (nlu.afirmativo) {
         return {
           conversa: { ...base, estado: 'proposta_enviada' },
-          saidas: [texto(MSG.orcamentoMini), texto(MSG.conviteVisita)],
+          saidas: [texto(MSG.orcamentoMini), pergunta(MSG.conviteVisita)],
         };
       }
       // Sem interesse claro: ainda assim convida para visita.
       return {
         conversa: { ...base, estado: 'proposta_enviada' },
-        saidas: [texto(MSG.conviteVisita)],
+        saidas: [pergunta(MSG.conviteVisita)],
       };
 
     case 'proposta_enviada':
@@ -370,11 +373,11 @@ export function decidir(
       if (nlu.afirmativo || nlu.intencao === 'agendar_visita') {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
-          saidas: [texto(MSG.perguntaPreferenciaVisita)],
+          saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
         };
       }
       // Sem aceite claro, reforça o convite à visita.
-      return { conversa: base, saidas: [texto(MSG.conviteVisita)] };
+      return { conversa: base, saidas: [pergunta(MSG.conviteVisita)] };
 
     case 'aguardando_pref_visita':
       // Coletamos a preferência (se veio) e repassamos para a Raquel agendar.
@@ -384,7 +387,7 @@ export function decidir(
           estado: 'handoff',
           motivoHandoff: `visita da noiva${prefVisitaTexto(nlu)}`,
         },
-        saidas: [texto(MSG.visitaVouRetornar)],
+        saidas: [pergunta(MSG.visitaVouRetornar)],
       };
 
     default:

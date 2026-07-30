@@ -93,6 +93,12 @@ export interface MensagemSaida {
   tipo: 'texto' | 'pdf';
   texto?: string;
   pdf?: TipoPdf;
+  /**
+   * Só para textos conversacionais (perguntas, convites): a camada de redação
+   * pode reescrever numa voz mais humana, respondendo saudação/small talk. NUNCA
+   * marcado em mensagens com preço, proposta ou regra (essas vão literais).
+   */
+  humanizar?: boolean;
 }
 
 /** Resultado da leitura da mensagem do lead pela camada de NLU. */

@@ -14,6 +14,16 @@ export interface NLU {
   analisar(texto: string, conversa: Conversa): Promise<EntradaNLU>;
 }
 
+/**
+ * Redação humanizada de mensagens conversacionais (perguntas/convites). Reescreve
+ * o texto-objetivo na voz da Raquel, respondendo saudação/small talk do cliente,
+ * SEM inventar valores, datas ou condições. Só é chamado para saídas marcadas
+ * como `humanizar`, que nunca contêm preço nem regra.
+ */
+export interface Redator {
+  humanizar(entrada: { objetivo: string; mensagemCliente: string }): Promise<string>;
+}
+
 /** Canal de mensagens (WhatsApp em produção, Sandbox em teste). */
 export interface MessagingProvider {
   enviar(telefone: string, saidas: MensagemSaida[]): Promise<void>;

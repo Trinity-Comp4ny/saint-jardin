@@ -6,6 +6,7 @@
 //   - processamento (/api/process): NLU, calendário, envio, transcrição, handoff.
 
 import { GeminiNLU } from '../adapters/GeminiNLU';
+import { GeminiRedator } from '../adapters/GeminiRedator';
 import { GroqTranscriber, type Transcriber } from '../adapters/GroqTranscriber';
 import { TelegramNotifier } from '../adapters/TelegramNotifier';
 import { WhatsAppCloudProvider } from '../adapters/WhatsAppCloudProvider';
@@ -106,6 +107,7 @@ export function montarProcessDeps(): ProcessAppDeps {
     contatos: new SupabaseContatoRepo(db),
     conversas: new SupabaseConversaRepo(db),
     nlu: new GeminiNLU(obrigatorio('GEMINI_API_KEY')),
+    redator: new GeminiRedator(obrigatorio('GEMINI_API_KEY')),
     calendario: new SupabaseCalendario(db),
     messaging,
     notifier: notifierLazy(),

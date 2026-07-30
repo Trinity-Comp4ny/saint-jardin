@@ -17,6 +17,7 @@ for (const linha of readFileSync('.env', 'utf8').split('\n')) {
 }
 
 import { GeminiNLU } from '../adapters/GeminiNLU';
+import { GeminiRedator } from '../adapters/GeminiRedator';
 import {
   InMemoryContatoRepo,
   InMemoryConversaRepo,
@@ -74,6 +75,7 @@ interface ResultadoCenario {
 }
 
 const gemini = new GeminiNLU();
+const redator = new GeminiRedator();
 
 function resumoSaidas(saidas: MensagemSaida[]): string[] {
   return saidas.map((s) => (s.tipo === 'pdf' ? `[PDF ${s.pdf}]` : (s.texto ?? '')));
@@ -89,6 +91,7 @@ async function simular(cenario: Cenario): Promise<ResultadoCenario> {
     contatos: new InMemoryContatoRepo(cenario.contatos ?? []),
     conversas,
     nlu: espiao,
+    redator,
     calendario: new MockCalendario(),
     messaging: provider,
     notifier,
@@ -302,6 +305,11 @@ const CENARIOS: Cenario[] = [
   // ── Visita técnica variações ─────────────────────────────────────────
   { nome: 'técnica dia/mês sem ano', categoria: 'visita-tecnica', mensagens: ['sou fornecedora, quero visita técnica dia 20 de outubro'] },
   { nome: 'técnica hoje/amanhã', categoria: 'visita-tecnica', mensagens: ['preciso de uma visita técnica amanhã'] },
+
+  // ── Small talk / social (humanização) ────────────────────────────────
+  { nome: 'tudo bem? social', categoria: 'social', mensagens: ['Boa tarde', 'Boa tarde Raquel, tudo bem?'] },
+  { nome: 'vou passar / um minuto', categoria: 'social', mensagens: ['oi', 'vou te passar as infos', 'só um minuto'] },
+  { nome: 'obrigada / gentileza', categoria: 'social', mensagens: ['oi', 'nossa que legal, muito obrigada!'] },
 ];
 
 async function main(): Promise<void> {

@@ -65,27 +65,43 @@ export interface ProcessDeps {
 
 /**
  * Processa os itens vencidos da fila (chamado pelo pg_cron a cada minuto).
- * Transcreve áudio quando necessário e roda o núcleo do agente.
+ * AGRUPA as mensagens do mesmo telefone (rajada: "Boa tarde" + "tudo bem?" +
+ * "vou passar") num único turno, para o bot responder uma vez com todo o
+ * contexto, em vez de uma resposta por mensagem. Transcreve áudio quando preciso.
+ * Retorna quantos turnos (telefones) foram processados.
  */
 export async function processarFila(deps: ProcessDeps): Promise<number> {
   const agora = deps.orquestrador.agora();
   const itens = await deps.fila.pegarVencidas(agora, deps.limite ?? 20);
-  let processados = 0;
 
+  // Agrupa por telefone preservando a ordem de chegada.
+  const grupos = new Map<string, typeof itens>();
   for (const item of itens) {
-    try {
-      const texto =
-        item.tipo === 'audio'
-          ? await deps.transcriber.transcrever(item.conteudo)
-          : item.conteudo;
-      if (texto) {
-        await processarMensagem(item.telefone, texto, deps.orquestrador);
-      }
-    } finally {
-      await deps.fila.marcarProcessado(item.id);
-    }
-    processados++;
+    const arr = grupos.get(item.telefone) ?? [];
+    arr.push(item);
+    grupos.set(item.telefone, arr);
   }
 
-  return processados;
+  let turnos = 0;
+  for (const [telefone, grupo] of grupos) {
+    try {
+      const partes: string[] = [];
+      for (const item of grupo) {
+        const texto =
+          item.tipo === 'audio'
+            ? await deps.transcriber.transcrever(item.conteudo)
+            : item.conteudo;
+        if (texto) partes.push(texto);
+      }
+      const mensagem = partes.join('\n');
+      if (mensagem) {
+        await processarMensagem(telefone, mensagem, deps.orquestrador);
+      }
+    } finally {
+      for (const item of grupo) await deps.fila.marcarProcessado(item.id);
+    }
+    turnos++;
+  }
+
+  return turnos;
 }
