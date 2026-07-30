@@ -1,7 +1,13 @@
 // Portas: contratos que isolam o núcleo de infraestrutura (WhatsApp, LLM,
 // calendário, banco). Trocar de provedor = trocar o adapter, sem tocar no núcleo.
 
-import type { Contato, Conversa, EntradaNLU, MensagemSaida } from '../domain/types';
+import type {
+  Contato,
+  Conversa,
+  EntradaNLU,
+  MensagemSaida,
+  PreferenciaVisita,
+} from '../domain/types';
 
 /** Leitura da mensagem do lead (texto já transcrito, se veio de áudio). */
 export interface NLU {
@@ -17,6 +23,17 @@ export interface MessagingProvider {
 export interface Calendario {
   verificar(dataISO: string): Promise<boolean>; // true = livre
   sugerirProxima(dataISO: string): Promise<string>;
+}
+
+/**
+ * Agenda de visita de noiva (ADR-0005). Slots de horário, não dia inteiro.
+ * Adapter plugável: Supabase agora, Google/Apple depois, sem tocar no núcleo.
+ */
+export interface AgendaVisita {
+  /** Próximos horários livres ("YYYY-MM-DDTHH:mm"), filtrados pela preferência. */
+  slotsLivres(opts: { aPartirDeISO: string; preferencia?: PreferenciaVisita; limite: number }): Promise<string[]>;
+  /** Marca o horário de fato (escreve). Idempotente por slot. */
+  marcar(slotISO: string, telefone: string, nome?: string): Promise<void>;
 }
 
 export interface ContatoRepository {

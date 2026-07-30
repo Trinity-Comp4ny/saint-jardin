@@ -178,6 +178,60 @@ describe('dia de semana acima do limite do mini', () => {
   });
 });
 
+describe('agendamento de visita', () => {
+  const SLOT = '2026-08-06T14:00'; // quinta-feira
+  const ctxVisita = (slots: string[]): ContextoDecisao => ({
+    agora: AGORA,
+    visita: { ativo: true, slots },
+  });
+
+  it('aceite da visita com agenda ativa pergunta a preferência', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctxVisita([]));
+    expect(r.conversa.estado).toBe('agendando_visita');
+    expect(r.saidas[0]?.texto).toMatch(/prefere algum dia/i);
+  });
+
+  it('sem agenda configurada, aceite da visita transborda (fallback)', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+  });
+
+  it('no agendamento, oferece um horário concreto e guarda o proposto', () => {
+    const r = decidir(conversaEm('agendando_visita'), nlu(), ctxVisita([SLOT]));
+    expect(r.conversa.estado).toBe('aguardando_confirmacao_visita');
+    expect(r.conversa.visitaProposta).toBe(SLOT);
+    expect(r.saidas[0]?.texto).toMatch(/quinta-feira \(06\/08\) às 14h/);
+  });
+
+  it('sem horário nas janelas, transborda para agendar manual', () => {
+    const r = decidir(conversaEm('agendando_visita'), nlu(), ctxVisita([]));
+    expect(r.conversa.estado).toBe('handoff');
+  });
+
+  it('ao confirmar o horário, fecha em visita_agendada e sinaliza a marcação', () => {
+    const conversa = { ...conversaEm('aguardando_confirmacao_visita'), visitaProposta: SLOT };
+    const r = decidir(conversa, nlu({ afirmativo: true }), ctxVisita([SLOT]));
+    expect(r.conversa.estado).toBe('visita_agendada');
+    expect(r.visitaParaMarcar).toBe(SLOT);
+    expect(r.saidas[0]?.texto).toMatch(/Marcado/i);
+  });
+
+  it('se pede outro dia, reoferece com a nova preferência', () => {
+    const OUTRO = '2026-08-08T09:00'; // sábado
+    const conversa = { ...conversaEm('aguardando_confirmacao_visita'), visitaProposta: SLOT };
+    const r = decidir(conversa, nlu({ visita: { diaSemana: 'sabado' } }), ctxVisita([OUTRO]));
+    expect(r.conversa.estado).toBe('aguardando_confirmacao_visita');
+    expect(r.conversa.visitaProposta).toBe(OUTRO);
+    expect(r.visitaParaMarcar).toBeUndefined();
+  });
+
+  it('recusa sem alternativa transborda para a Raquel', () => {
+    const conversa = { ...conversaEm('aguardando_confirmacao_visita'), visitaProposta: SLOT };
+    const r = decidir(conversa, nlu(), ctxVisita([SLOT]));
+    expect(r.conversa.estado).toBe('handoff');
+  });
+});
+
 describe('disponibilidade de data', () => {
   it('sugere alternativa quando a data está ocupada', () => {
     const r = decidir(

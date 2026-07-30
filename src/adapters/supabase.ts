@@ -2,6 +2,7 @@
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type {
+  AgendaVisita,
   Calendario,
   ContatoRepository,
   ConversaRepository,
@@ -12,7 +13,14 @@ import type {
   MensagemRepo,
   TipoMensagemLog,
 } from '../ports';
-import type { Contato, Conversa, Slots, StatusContato } from '../domain/types';
+import type {
+  Contato,
+  Conversa,
+  PreferenciaVisita,
+  Slots,
+  StatusContato,
+} from '../domain/types';
+import { filtrarPreferencia, slotsCandidatos } from '../domain/visita';
 
 export function criarSupabase(url: string, serviceRoleKey: string): SupabaseClient {
   return createClient(url, serviceRoleKey, {
@@ -50,7 +58,7 @@ export class SupabaseConversaRepo implements ConversaRepository {
   async obter(telefone: string): Promise<Conversa | null> {
     const { data } = await this.db
       .from('conversas')
-      .select('telefone, estado, slots, motivo_handoff, criado_em, atualizado_em')
+      .select('telefone, estado, slots, motivo_handoff, visita_proposta, criado_em, atualizado_em')
       .eq('telefone', telefone)
       .maybeSingle();
     return data ? mapConversa(data) : null;
@@ -63,6 +71,7 @@ export class SupabaseConversaRepo implements ConversaRepository {
         estado: conversa.estado,
         slots: conversa.slots,
         motivo_handoff: conversa.motivoHandoff ?? null,
+        visita_proposta: conversa.visitaProposta ?? null,
         criado_em: conversa.criadoEm,
         atualizado_em: conversa.atualizadoEm,
       },
@@ -177,6 +186,45 @@ export class SupabaseCalendario implements Calendario {
   }
 }
 
+/**
+ * Agenda de visita (ADR-0005). Disponibilidade = janelas de visita menos os
+ * horários já marcados na tabela `visitas`. Fonte trocável por Google/Apple depois.
+ */
+export class SupabaseAgendaVisita implements AgendaVisita {
+  constructor(private readonly db: SupabaseClient) {}
+
+  async slotsLivres(opts: {
+    aPartirDeISO: string;
+    preferencia?: PreferenciaVisita;
+    limite: number;
+  }): Promise<string[]> {
+    const ocupados = await this.ocupados(opts.aPartirDeISO);
+    const candidatos = slotsCandidatos(opts.aPartirDeISO);
+    const livres = candidatos.filter((s) => !ocupados.has(s));
+
+    const naPreferencia = filtrarPreferencia(livres, opts.preferencia);
+    // Preferência sem vaga no horizonte: cai para os próximos horários livres.
+    const base = naPreferencia.length > 0 ? naPreferencia : livres;
+    return base.slice(0, opts.limite);
+  }
+
+  async marcar(slotISO: string, telefone: string, nome?: string): Promise<void> {
+    // upsert por `inicio` (unique): idempotente se a mesma confirmação repetir.
+    const { error } = await this.db
+      .from('visitas')
+      .upsert({ inicio: slotISO, telefone, nome: nome ?? null }, { onConflict: 'inicio' });
+    if (error) throw new Error(`falha ao marcar visita: ${error.message}`);
+  }
+
+  private async ocupados(aPartirDeISO: string): Promise<Set<string>> {
+    const { data } = await this.db
+      .from('visitas')
+      .select('inicio')
+      .gte('inicio', aPartirDeISO);
+    return new Set((data ?? []).map((r) => String((r as { inicio: string }).inicio)));
+  }
+}
+
 interface LinhaContato {
   telefone: string;
   nome: string | null;
@@ -198,6 +246,7 @@ interface LinhaConversa {
   estado: string;
   slots: unknown;
   motivo_handoff: string | null;
+  visita_proposta?: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -208,6 +257,7 @@ function mapConversa(r: LinhaConversa): Conversa {
     estado: r.estado as Conversa['estado'],
     slots: (r.slots ?? {}) as Slots,
     motivoHandoff: r.motivo_handoff ?? undefined,
+    visitaProposta: r.visita_proposta ?? undefined,
     criadoEm: r.criado_em,
     atualizadoEm: r.atualizado_em,
   };

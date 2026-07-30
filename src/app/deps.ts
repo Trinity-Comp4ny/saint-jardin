@@ -10,6 +10,7 @@ import { GroqTranscriber, type Transcriber } from '../adapters/GroqTranscriber';
 import { TelegramNotifier } from '../adapters/TelegramNotifier';
 import { WhatsAppCloudProvider } from '../adapters/WhatsAppCloudProvider';
 import {
+  SupabaseAgendaVisita,
   SupabaseCalendario,
   SupabaseContatoRepo,
   SupabaseConversaRepo,
@@ -107,6 +108,7 @@ export function montarProcessDeps(): ProcessAppDeps {
     conversas: new SupabaseConversaRepo(db),
     nlu: new GeminiNLU(obrigatorio('GEMINI_API_KEY')),
     calendario: new SupabaseCalendario(db),
+    agendaVisita: new SupabaseAgendaVisita(db),
     messaging,
     notifier: notifierLazy(),
     mensagens: new SupabaseMensagemRepo(db),

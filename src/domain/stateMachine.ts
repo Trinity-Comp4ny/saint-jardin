@@ -15,6 +15,7 @@ import {
 } from './types';
 import { MSG } from './persona';
 import { pdfPropostaPorAno } from './pdfs';
+import { descreverSlot } from './visita';
 
 export interface DisponibilidadeData {
   data: string;
@@ -22,14 +23,25 @@ export interface DisponibilidadeData {
   alternativa?: string;
 }
 
+/** Estado da agenda de visita para a decisão (calculado pelo orchestrator). */
+export interface ContextoVisita {
+  /** Há agenda de visita configurada? Se não, o aceite de visita cai no handoff. */
+  ativo: boolean;
+  /** Próximos horários livres já filtrados pela preferência da noiva (vazio = sem vaga). */
+  slots: string[];
+}
+
 export interface ContextoDecisao {
   agora: string;
   disponibilidadeData?: DisponibilidadeData;
+  visita?: ContextoVisita;
 }
 
 export interface ResultadoDecisao {
   conversa: Conversa;
   saidas: MensagemSaida[];
+  /** Horário de visita que o orchestrator deve efetivamente marcar (efeito colateral). */
+  visitaParaMarcar?: string;
 }
 
 const texto = (t: string): MensagemSaida => ({ tipo: 'texto', texto: t });
@@ -163,9 +175,14 @@ export function decidir(
   });
 
   // Intenções que exigem humano têm prioridade, exceto na primeira saudação
-  // (queremos ao menos apresentar o espaço antes de transbordar).
+  // (queremos ao menos apresentar o espaço antes de transbordar). Durante o
+  // agendamento, "agendar_visita" é redundante (já estamos agendando): ignoramos
+  // esse motivo para não transbordar no meio do fluxo; negociar/fora do script seguem.
+  const noFluxoVisita =
+    conversa.estado === 'agendando_visita' ||
+    conversa.estado === 'aguardando_confirmacao_visita';
   const motivo = motivoDaIntencao(nlu.intencao);
-  if (motivo && conversa.estado !== 'novo') {
+  if (motivo && conversa.estado !== 'novo' && !(nlu.intencao === 'agendar_visita' && noFluxoVisita)) {
     return handoff(motivo);
   }
   // No primeiro contato, só o caso "cliente já fechado" transborda de imediato.
@@ -270,12 +287,60 @@ export function decidir(
 
     case 'proposta_enviada':
       // Orçamento já foi e o único convite em aberto é a visita. Um "sim/vamos"
-      // é aceite da visita: precisa da Raquel para agendar de fato.
+      // é aceite da visita.
       if (nlu.afirmativo) {
+        // Com agenda de visita ativa, o bot conduz o agendamento (ADR-0005);
+        // senão, transborda para a Raquel agendar (comportamento anterior).
+        if (ctx.visita?.ativo) {
+          return {
+            conversa: { ...base, estado: 'agendando_visita' },
+            saidas: [texto(MSG.perguntaPreferenciaVisita)],
+          };
+        }
         return handoff('quer agendar visita');
       }
       // Sem aceite claro, reforça o convite à visita.
       return { conversa: base, saidas: [texto(MSG.conviteVisita)] };
+
+    case 'agendando_visita': {
+      const proposto = (ctx.visita?.slots ?? [])[0];
+      if (!proposto) {
+        return handoff('visita: sem horário nas janelas, agendar manual');
+      }
+      return {
+        conversa: { ...base, estado: 'aguardando_confirmacao_visita', visitaProposta: proposto },
+        saidas: [texto(MSG.ofertaHorarioVisita(descreverSlot(proposto)))],
+      };
+    }
+
+    case 'aguardando_confirmacao_visita': {
+      // A noiva topou o horário oferecido: marca e avisa a Raquel.
+      if (nlu.afirmativo && base.visitaProposta) {
+        return {
+          conversa: { ...base, estado: 'visita_agendada' },
+          saidas: [texto(MSG.visitaConfirmada(descreverSlot(base.visitaProposta)))],
+          visitaParaMarcar: base.visitaProposta,
+        };
+      }
+      // Pediu outro dia/horário: reoferece com a nova preferência já refletida nos slots.
+      const querOutro =
+        nlu.visita !== undefined &&
+        (nlu.visita.diaSemana !== undefined ||
+          nlu.visita.periodo !== undefined ||
+          nlu.visita.indiferente === true);
+      if (querOutro) {
+        const proposto = (ctx.visita?.slots ?? [])[0];
+        if (!proposto) {
+          return handoff('visita: sem horário nas janelas, agendar manual');
+        }
+        return {
+          conversa: { ...base, estado: 'aguardando_confirmacao_visita', visitaProposta: proposto },
+          saidas: [texto(MSG.ofertaHorarioVisita(descreverSlot(proposto)))],
+        };
+      }
+      // Recusa sem alternativa clara: deixa a Raquel ajustar.
+      return handoff('visita: ajustar horário com a noiva');
+    }
 
     default:
       return { conversa: base, saidas: [] };

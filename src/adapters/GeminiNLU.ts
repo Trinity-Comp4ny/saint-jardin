@@ -43,6 +43,15 @@ const responseSchema = {
     },
     intencao: { type: Type.STRING, enum: [...INTENCOES] },
     afirmativo: { type: Type.BOOLEAN, nullable: true },
+    visita: {
+      type: Type.OBJECT,
+      nullable: true,
+      properties: {
+        diaSemana: { type: Type.STRING, enum: [...DIAS], nullable: true },
+        periodo: { type: Type.STRING, enum: ['manha', 'tarde'], nullable: true },
+        indiferente: { type: Type.BOOLEAN, nullable: true },
+      },
+    },
     nomeDetectado: { type: Type.STRING, nullable: true },
     dataEventoDetectada: { type: Type.STRING, nullable: true },
   },
@@ -79,6 +88,13 @@ const schema = z.object({
     .default({}),
   intencao: z.enum(INTENCOES).default('seguir_fluxo'),
   afirmativo: z.boolean().optional(),
+  visita: z
+    .object({
+      diaSemana: z.enum(DIAS).optional(),
+      periodo: z.enum(['manha', 'tarde']).optional(),
+      indiferente: z.boolean().optional(),
+    })
+    .optional(),
   nomeDetectado: z.string().optional(),
   dataEventoDetectada: z.string().optional(),
 });
@@ -101,6 +117,11 @@ Extraia (deixe null o que a mensagem não disser):
   - "fora_do_script": pergunta que foge do primeiro atendimento padrão.
   - "seguir_fluxo": caso geral (informa dados, cumprimenta, pede orçamento).
 - afirmativo: true se for uma resposta positiva (sim, quero, pode mandar).
+- visita: SÓ quando o estado for "agendando_visita" ou "aguardando_confirmacao_visita" (a noiva está escolhendo o dia da VISITA ao espaço). Preencha:
+  - visita.diaSemana: dia da semana que ela prefere para a visita (ex.: "quinta" -> quinta).
+  - visita.periodo: "manha" ou "tarde", se ela indicar.
+  - visita.indiferente: true se ela disser que tanto faz / qualquer dia / você que escolhe.
+  Nesses estados, a intenção é "seguir_fluxo" (ela está agendando), a não ser que claramente negocie valor ou saia do assunto.
 - nomeDetectado / dataEventoDetectada: se a pessoa se identificar como cliente já fechado.`;
 
 export class GeminiNLU implements NLU {

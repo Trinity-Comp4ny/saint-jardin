@@ -54,6 +54,18 @@ export const MSG = {
     'Vamos agendar um dia para você conhecer nossa estrutura e analisar a ' +
     'experiência que oferecemos no Saint Jardin?',
 
+  perguntaPreferenciaVisita:
+    'Que ótimo! ☺️ Você prefere algum dia para conhecer o espaço? ' +
+    'Pode ser essa semana ou a próxima.',
+
+  // `slot` é o texto já formatado (ex.: "quinta-feira (07/08) às 14h").
+  ofertaHorarioVisita: (slot: string): string =>
+    `Consigo ${slot}. Fica bom para você? ☺️`,
+
+  visitaConfirmada: (slot: string): string =>
+    `Marcado! Te espero ${slot} aqui no Saint Jardin. ☺️ ` +
+    `Qualquer coisa, é só me avisar por aqui.`,
+
   pedirDadosFaltantes: (faltando: string[]): string =>
     `Só pra eu montar seu orçamento certinho, você pode me confirmar ${faltando.join(
       ' e ',
