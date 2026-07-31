@@ -18,16 +18,29 @@ export const MSG = {
 
   // Variantes: escolhidas por um seed da mensagem, para não repetir a mesma
   // frase quando a noiva responde algo que não avança (a 1ª é a "canônica").
+  // Imperativa e pedindo tudo de uma vez: uma pergunta de sim/não ("já tem data
+  // em mente?") faz a noiva responder "sim" sem avançar, virando loop.
   perguntaData: [
-    'Você já tem uma data em mente para o evento? ☺️',
-    'E sobre a data, já tem algum dia pensado? 😊',
-    'Me conta: você já escolheu a data ou ainda está decidindo?',
+    'Qual a data que você pensou para o casamento? Me diz o dia, o mês e o ano (2027 ou 2028). ☺️',
+    'Me conta a data do evento: dia, mês e ano (2027 ou 2028)? 😊',
+    'Para seguir com seu orçamento, qual o dia, mês e ano (2027 ou 2028) do casamento?',
   ],
 
   perguntaAno: [
     'E o evento seria para qual ano, 2027 ou 2028?',
     'Só me confirma o ano, por favor: 2027 ou 2028? ☺️',
   ],
+
+  // Já sabemos o mês (a noiva disse "outubro") e falta o dia: pergunta direto o
+  // dia daquele mês, em vez de repetir a pergunta genérica de data.
+  perguntaDiaDoMes: (mes: number): string => {
+    const nomes = [
+      'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+      'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+    ];
+    const nome = nomes[mes - 1];
+    return nome ? `Qual dia de ${nome} você pensou? ☺️` : 'Qual dia você pensou? ☺️';
+  },
 
   // Dia de semana com mais de 80 convidados: não cabe no mini. Explicamos o
   // limite e esperamos a noiva confirmar que quer a proposta normal.

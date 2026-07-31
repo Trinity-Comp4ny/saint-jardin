@@ -2,7 +2,7 @@
 // disponibilidade de data, a decisão da máquina de estados e os efeitos
 // colaterais (enviar mensagens, alertar handoff, persistir).
 
-import { dataCompleta, decidir, novaConversa, type ContextoDecisao } from '../domain/stateMachine';
+import { dataCompleta, decidir, mesclarSlots, novaConversa, type ContextoDecisao } from '../domain/stateMachine';
 import type { Conversa, MensagemSaida } from '../domain/types';
 import type {
   Calendario,
@@ -27,6 +27,12 @@ export interface Deps {
   agora: () => string;
   /** Log de auditoria (opcional): grava entrada e saídas por telefone. */
   mensagens?: MensagemRepo;
+  /**
+   * Números em modo teste: habilita o comando de reset da conversa (`#reset`),
+   * para a Raquel repetir os testes sem ficar presa no handoff. Vazio/ausente em
+   * produção — o comando simplesmente não existe fora dos números listados.
+   */
+  numerosTeste?: string[];
 }
 
 export interface ResultadoProcessamento {
@@ -57,9 +63,12 @@ async function humanizarSaidas(
 ): Promise<MensagemSaida[]> {
   if (!deps.redator) return saidas;
   return Promise.all(
-    saidas.map(async (s) => {
+    saidas.map(async (s, i) => {
       if (s.tipo !== 'texto' || !s.humanizar || !s.texto) return s;
-      const texto = await deps.redator!.humanizar({ objetivo: s.texto, mensagemCliente });
+      // Se um texto (ex.: a apresentação, que já saúda) veio antes nesta mesma
+      // rajada, a pergunta humanizada não deve saudar de novo (evita "olá" duplo).
+      const jaSaudou = saidas.slice(0, i).some((a) => a.tipo === 'texto');
+      const texto = await deps.redator!.humanizar({ objetivo: s.texto, mensagemCliente, jaSaudou });
       return { ...s, texto };
     }),
   );
@@ -81,12 +90,27 @@ async function transbordar(
   return { conversa: atualizada, saidas: [] };
 }
 
+/** Comandos que zeram a conversa no modo teste (variações do "#reset"). */
+const COMANDOS_RESET = new Set(['reset', '#reset', 'resetar', '#resetar']);
+
 export async function processarMensagem(
   telefone: string,
   texto: string,
   deps: Deps,
 ): Promise<ResultadoProcessamento> {
   await deps.mensagens?.registrar(telefone, 'entrada', 'texto', texto);
+
+  // Comando de teste: só vale para os números em `numerosTeste` (vazio em
+  // produção, então inerte). Zera a conversa para recomeçar do 'novo'.
+  if (deps.numerosTeste?.includes(telefone) && COMANDOS_RESET.has(texto.trim().toLowerCase())) {
+    const zerada = novaConversa(telefone, deps.agora());
+    await deps.conversas.salvar(zerada);
+    const aviso: MensagemSaida[] = [
+      { tipo: 'texto', texto: 'Conversa zerada. Pode recomeçar o teste. 🧪' },
+    ];
+    await deps.messaging.enviar(telefone, aviso);
+    return { conversa: zerada, saidas: aviso };
+  }
 
   const conversaAtual =
     (await deps.conversas.obter(telefone)) ?? novaConversa(telefone, deps.agora());
@@ -124,11 +148,9 @@ export async function processarMensagem(
   // 4. Disponibilidade de data, quando há data específica em jogo (informada
   // completa, ou dia/mês já combinado com o ano ao longo da conversa).
   const ctx: ContextoDecisao = { agora: deps.agora(), seed };
-  const dataAlvo = dataCompleta({
-    data: nlu.slots.data ?? conversaAtual.slots.data,
-    mesDia: nlu.slots.mesDia ?? conversaAtual.slots.mesDia,
-    ano: nlu.slots.ano ?? conversaAtual.slots.ano,
-  });
+  // Mescla os slots como a máquina de estados fará (inclui combinar mês+dia de
+  // turnos diferentes em mesDia), para o check de calendário ver a data completa.
+  const dataAlvo = dataCompleta(mesclarSlots(conversaAtual.slots, nlu.slots));
   if (dataAlvo) {
     const livre = await deps.calendario.verificar(dataAlvo);
     ctx.disponibilidadeData = {

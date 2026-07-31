@@ -37,6 +37,10 @@ export interface Slots {
   data?: string;
   /** Dia e mês sem ano (formato "MM-DD"), quando a noiva diz "26 de janeiro" sem citar o ano. */
   mesDia?: string;
+  /** Dia do mês (1-31) informado sozinho, para combinar com `mes` de outro turno. */
+  dia?: number;
+  /** Mês (1-12) informado sozinho, para combinar com `dia` de outro turno. */
+  mes?: number;
   ano?: Ano;
   diaSemana?: DiaSemana;
   /** Preferência genérica quando o dia exato não foi dado ("fim de semana" / "dia de semana"). */

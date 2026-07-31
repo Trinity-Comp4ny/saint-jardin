@@ -75,10 +75,20 @@ export function ehMiniWedding(slots: Slots): boolean {
   return dia === 'dia_de_semana' && cabeNoMini;
 }
 
-function mesclarSlots(atual: Slots, novo: Slots): Slots {
+export function mesclarSlots(atual: Slots, novo: Slots): Slots {
+  const mes = novo.mes ?? atual.mes;
+  const dia = novo.dia ?? atual.dia;
+  let mesDia = novo.mesDia ?? atual.mesDia;
+  // Mês e dia vieram em mensagens diferentes ("outubro" e depois "30"): combina
+  // no MM-DD canônico, para o resto do fluxo continuar usando só `mesDia`.
+  if (!mesDia && mes && dia) {
+    mesDia = `${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  }
   return {
     data: novo.data ?? atual.data,
-    mesDia: novo.mesDia ?? atual.mesDia,
+    mesDia,
+    mes,
+    dia,
     ano: novo.ano ?? atual.ano,
     diaSemana: novo.diaSemana ?? atual.diaSemana,
     preferenciaDia: novo.preferenciaDia ?? atual.preferenciaDia,
@@ -137,6 +147,11 @@ function avancarComData(
 ): ResultadoDecisao {
   const ano = anoEfetivo(slots);
   if (!ano) {
+    // Só veio o mês (ex.: "outubro"): pergunta o dia daquele mês, em vez de
+    // repetir a pergunta genérica de data.
+    if (slots.mes && !slots.dia && !slots.mesDia) {
+      return { conversa: base, saidas: [pergunta(MSG.perguntaDiaDoMes(slots.mes))] };
+    }
     // Sem ano ainda: se já temos o dia/mês, falta só o ano; senão, pedimos a data.
     const opcoes = slots.mesDia ? MSG.perguntaAno : MSG.perguntaData;
     return { conversa: base, saidas: [pergunta(vary(opcoes, ctx.seed))] };

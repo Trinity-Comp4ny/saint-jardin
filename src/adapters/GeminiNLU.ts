@@ -32,6 +32,8 @@ const responseSchema = {
       properties: {
         data: { type: Type.STRING, nullable: true },
         mesDia: { type: Type.STRING, nullable: true },
+        dia: { type: Type.INTEGER, nullable: true },
+        mes: { type: Type.INTEGER, nullable: true },
         ano: { type: Type.INTEGER, nullable: true },
         diaSemana: { type: Type.STRING, enum: [...DIAS], nullable: true },
         preferenciaDia: {
@@ -76,6 +78,18 @@ const schema = z.object({
         .regex(/^\d{2}-\d{2}$/)
         .optional()
         .catch(undefined),
+      dia: z
+        .preprocess(
+          (v) => (v === null || v === undefined || v === '' ? undefined : Number(v)),
+          z.number().int().min(1).max(31).optional(),
+        )
+        .catch(undefined),
+      mes: z
+        .preprocess(
+          (v) => (v === null || v === undefined || v === '' ? undefined : Number(v)),
+          z.number().int().min(1).max(12).optional(),
+        )
+        .catch(undefined),
       // Ano fora de 2027/2028 (o modelo às vezes devolve 2026, 2029, etc.) vira
       // undefined em vez de derrubar todo o parse — a máquina de estados então
       // pergunta o ano normalmente. `.catch` é a rede de segurança.
@@ -112,12 +126,14 @@ Sua ÚNICA função é LER a mensagem e devolver os dados. Você NUNCA responde 
 
 Extraia (deixe null o que a mensagem não disser):
 - slots.data: data do evento em ISO (yyyy-mm-dd) apenas se houver data completa com dia, mês e ano.
-- slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser só o dia/mês (ex.: "26 de janeiro" -> "01-26"). Deixe null se ela já deu o ano (use data) ou se não citou dia/mês.
+- slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser dia E mês JUNTOS (ex.: "26 de janeiro" -> "01-26", "30 de outubro" -> "10-30"). Deixe null se ela já deu o ano (use data) ou se não citou dia e mês juntos.
+- slots.mes: número do mês (1-12) quando ela citar SÓ o mês, sem o dia (ex.: "penso em outubro" -> 10). Deixe null se já deu dia e mês juntos (use mesDia).
+- slots.dia: número do dia do mês (1-31) quando ela citar SÓ o dia, sem o mês. Em especial, se já perguntamos a DATA e a mensagem é só um número (ex.: "30", "dia 12"), é o dia do evento -> slots.dia. Deixe null se não for um dia de evento.
 - slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data). Aceite dois dígitos: "28" -> 2028, "27" -> 2027.
 - slots.diaSemana: o dia da semana exato, se citado (ex.: "sábado" -> sabado, sem acento).
 - slots.preferenciaDia: "fim_de_semana" (sábado/domingo) ou "dia_de_semana" (segunda a sexta),
   quando a pessoa fala de forma genérica sem citar o dia exato.
-- slots.convidados: número estimado de convidados (ex.: "150 pessoas" -> 150).
+- slots.convidados: número estimado de convidados, SÓ quando o número se refere claramente a pessoas ("150 convidados", "somos uns 200", "200 pessoas"). Um número solto logo depois de perguntarmos a DATA é o dia do evento (slots.dia), NÃO convidados. Nunca reinterprete um número como convidados se "Dados já coletados" já traz convidados e a mensagem não fala de pessoas.
 - intencao:
   - "cliente_fechado": dá a entender que JÁ contratou/fechou o casamento.
   - "agendar_visita": a noiva/cliente quer conhecer o espaço (visita normal).

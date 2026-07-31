@@ -77,6 +77,24 @@ describe('identificação de cliente fechado', () => {
   });
 });
 
+describe('comando de reset (modo teste)', () => {
+  it('zera a conversa quando vem de um número de teste', async () => {
+    deps.numerosTeste = [NOIVA];
+    await processarMensagem(NOIVA, 'penso em um sábado, 200 pessoas 2027', deps);
+    const r = await processarMensagem(NOIVA, '#reset', deps);
+
+    expect(r.conversa.estado).toBe('novo');
+    expect(r.conversa.slots).toEqual({});
+    expect(todasSaidas().at(-1)?.texto).toMatch(/zerada/i);
+  });
+
+  it('ignora o comando quando o número não está em modo teste', async () => {
+    // Sem numerosTeste: "#reset" é tratado como mensagem comum, não reseta.
+    const r = await processarMensagem(NOIVA, '#reset', deps);
+    expect(r.conversa.estado).not.toBe('novo');
+  });
+});
+
 describe('bot silencioso após handoff', () => {
   it('não responde mais depois que a conversa vira handoff/humano', async () => {
     await processarMensagem('5511999990000', 'oi', deps); // vira handoff

@@ -49,6 +49,7 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
       tipo: msg.tipo,
       conteudo,
       processarApos: adiarISO(deps.agora(), base + jitter),
+      mensagemId: msg.messageId,
     });
     enfileiradas++;
   }
@@ -95,7 +96,14 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
       }
       const mensagem = partes.join('\n');
       if (mensagem) {
-        await processarMensagem(telefone, mensagem, deps.orquestrador);
+        const { conversa } = await processarMensagem(telefone, mensagem, deps.orquestrador);
+        // Read/unread na caixa da Raquel: se a conversa precisa dela (handoff) ou
+        // já está com ela (humano), deixa NÃO LIDA para ela ver; caso contrário o
+        // bot resolveu sozinho, então marca a última mensagem do turno como lida.
+        if (conversa.estado !== 'handoff' && conversa.estado !== 'humano') {
+          const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
+          if (ultimoId) await deps.orquestrador.messaging.marcarLido(ultimoId);
+        }
       }
     } finally {
       for (const item of grupo) await deps.fila.marcarProcessado(item.id);

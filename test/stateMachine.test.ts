@@ -79,7 +79,30 @@ describe('fluxo feliz - evento normal', () => {
       nlu({ slots: { diaSemana: 'sabado', convidados: 200 } }),
       ctx,
     );
-    expect(r.saidas[0]?.texto).toMatch(/data em mente/i);
+    expect(r.saidas[0]?.texto).toMatch(/2027 ou 2028/);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+  });
+
+  it('pergunta o dia do mês quando a noiva só disse o mês (sem dia)', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 200 }),
+      nlu({ slots: { mes: 10 } }),
+      ctx,
+    );
+    expect(r.saidas[0]?.texto).toMatch(/qual dia de outubro/i);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+  });
+
+  it('combina mês e dia de mensagens diferentes em mesDia e pergunta só o ano', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 300, mes: 10 }),
+      nlu({ slots: { dia: 30 } }),
+      ctx,
+    );
+    expect(r.conversa.slots.mesDia).toBe('10-30');
+    // não estraga os convidados já coletados
+    expect(r.conversa.slots.convidados).toBe(300);
+    expect(r.saidas[0]?.texto).toMatch(/qual ano/i);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
   });
 
@@ -166,7 +189,7 @@ describe('dia de semana acima do limite do mini', () => {
       nlu({ afirmativo: true }),
       ctx,
     );
-    expect(r.saidas[0]?.texto).toMatch(/data em mente/i);
+    expect(r.saidas[0]?.texto).toMatch(/2027 ou 2028/);
     expect(r.conversa.estado).toBe('aguardando_data_normal');
   });
 

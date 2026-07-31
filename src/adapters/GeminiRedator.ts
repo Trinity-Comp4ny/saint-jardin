@@ -40,13 +40,22 @@ export class GeminiRedator implements Redator {
     this.client = new GoogleGenAI({ apiKey });
   }
 
-  async humanizar(entrada: { objetivo: string; mensagemCliente: string }): Promise<string> {
+  async humanizar(entrada: {
+    objetivo: string;
+    mensagemCliente: string;
+    jaSaudou?: boolean;
+  }): Promise<string> {
     try {
+      // Quando a saudação já foi (apresentação na mesma rajada), reforça a regra:
+      // ir direto ao objetivo, sem "olá/oi/tudo bem", pra não saudar duas vezes.
+      const instrucaoSaudacao = entrada.jaSaudou
+        ? '\nJÁ SAUDAMOS o cliente nesta conversa agora. NÃO comece com "olá", "oi" nem "tudo bem?": vá direto ao OBJETIVO.'
+        : '';
       const resp = await this.client.models.generateContent({
         model: MODELO,
         contents:
           `Mensagem do cliente: "${entrada.mensagemCliente}"\n` +
-          `OBJETIVO (o que comunicar agora): "${entrada.objetivo}"`,
+          `OBJETIVO (o que comunicar agora): "${entrada.objetivo}"${instrucaoSaudacao}`,
         config: {
           systemInstruction: SYSTEM,
           // Temperatura mais alta = mais variação nas aberturas (menos "Que ótimo!").

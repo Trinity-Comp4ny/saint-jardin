@@ -21,12 +21,24 @@ export interface NLU {
  * como `humanizar`, que nunca contêm preço nem regra.
  */
 export interface Redator {
-  humanizar(entrada: { objetivo: string; mensagemCliente: string }): Promise<string>;
+  humanizar(entrada: {
+    objetivo: string;
+    mensagemCliente: string;
+    /** A saudação já foi enviada nesta rajada (ex.: apresentação): não saudar de novo. */
+    jaSaudou?: boolean;
+  }): Promise<string>;
 }
 
 /** Canal de mensagens (WhatsApp em produção, Sandbox em teste). */
 export interface MessagingProvider {
   enviar(telefone: string, saidas: MensagemSaida[]): Promise<void>;
+  /**
+   * Marca uma mensagem recebida como LIDA na Cloud API. Usado para controlar a
+   * caixa da Raquel: conversa que o bot resolveu sozinho vira lida (some das
+   * não lidas); a que precisa dela fica não lida. Best-effort: uma falha aqui
+   * NUNCA deve derrubar o atendimento.
+   */
+  marcarLido(messageId: string): Promise<void>;
 }
 
 /** Disponibilidade de datas de evento (calendário dedicado, só livre/ocupado). */
@@ -89,6 +101,8 @@ export interface ItemFila {
   /** texto da mensagem, ou o mediaId quando tipo === 'audio'. */
   conteudo: string;
   processarApos: string; // ISO; implementa o delay proposital (~1min)
+  /** id da mensagem na Cloud API (para marcá-la como lida no fim do turno). */
+  mensagemId?: string;
 }
 
 /** Fila durável com delay (a resposta não é instantânea, para não parecer bot). */

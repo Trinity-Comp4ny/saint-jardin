@@ -56,8 +56,15 @@ function orquestrador(nlu: NLU): Deps {
   };
 }
 
-function item(id: string, telefone: string, conteudo: string): ItemFila {
-  return { id, telefone, tipo: 'texto', conteudo, processarApos: '2026-07-30T11:59:00.000Z' };
+function item(id: string, telefone: string, conteudo: string, mensagemId?: string): ItemFila {
+  return {
+    id,
+    telefone,
+    tipo: 'texto',
+    conteudo,
+    processarApos: '2026-07-30T11:59:00.000Z',
+    ...(mensagemId ? { mensagemId } : {}),
+  };
 }
 
 describe('processarFila — agrupamento de rajada', () => {
@@ -85,5 +92,40 @@ describe('processarFila — agrupamento de rajada', () => {
 
     expect(turnos).toBe(2);
     expect(textos).toHaveLength(2);
+  });
+});
+
+describe('processarFila — lida/não-lida na caixa da Raquel', () => {
+  it('marca a última mensagem do turno como lida quando o bot resolve sozinho', async () => {
+    const { fila } = filaCom([
+      item('1', '5511999', 'oi', 'wamid.A'),
+      item('2', '5511999', 'quero orçamento', 'wamid.B'),
+    ]);
+    const { nlu } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const deps: Deps = { ...orquestrador(nlu), messaging };
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    // Só o id da última mensagem da rajada é marcado (marca tudo até ele).
+    expect(messaging.lidas).toEqual(['wamid.B']);
+  });
+
+  it('deixa não lida quando a conversa vira handoff (precisa da Raquel)', async () => {
+    const { fila } = filaCom([item('1', '5511999990000', 'oi, dúvida', 'wamid.C')]);
+    const { nlu } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const deps: Deps = {
+      ...orquestrador(nlu),
+      messaging,
+      // Cliente já fechado por número: o orquestrador transborda para handoff.
+      contatos: new InMemoryContatoRepo([
+        { telefone: '5511999990000', status: 'fechado' },
+      ]),
+    };
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    expect(messaging.lidas).toEqual([]);
   });
 });

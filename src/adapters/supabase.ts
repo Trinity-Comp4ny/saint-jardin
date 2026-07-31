@@ -122,6 +122,7 @@ export class SupabaseFila implements Fila {
       tipo: item.tipo,
       conteudo: item.conteudo,
       processar_apos: item.processarApos,
+      mensagem_id: item.mensagemId ?? null,
     });
     if (error) throw new Error(`enfileirar: ${error.message}`);
   }
@@ -136,7 +137,7 @@ export class SupabaseFila implements Fila {
       .update({ processado_em: new Date().toISOString() })
       .is('processado_em', null)
       .lte('processar_apos', agoraISO)
-      .select('id, telefone, tipo, conteudo, processar_apos');
+      .select('id, telefone, tipo, conteudo, processar_apos, mensagem_id');
     if (error) throw new Error(`pegarVencidas: ${error.message}`);
     return (data ?? []).map((r) => ({
       id: String(r.id),
@@ -144,6 +145,7 @@ export class SupabaseFila implements Fila {
       tipo: r.tipo === 'audio' ? 'audio' : 'texto',
       conteudo: String(r.conteudo ?? ''),
       processarApos: String(r.processar_apos),
+      ...(r.mensagem_id ? { mensagemId: String(r.mensagem_id) } : {}),
     }));
   }
 

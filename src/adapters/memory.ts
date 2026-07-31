@@ -13,9 +13,14 @@ import type { Contato, Conversa, MensagemSaida } from '../domain/types';
 
 export class SandboxProvider implements MessagingProvider {
   public enviadas: { telefone: string; saidas: MensagemSaida[] }[] = [];
+  public lidas: string[] = [];
 
   async enviar(telefone: string, saidas: MensagemSaida[]): Promise<void> {
     this.enviadas.push({ telefone, saidas });
+  }
+
+  async marcarLido(messageId: string): Promise<void> {
+    this.lidas.push(messageId);
   }
 }
 

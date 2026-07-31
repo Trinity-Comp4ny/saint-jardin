@@ -45,6 +45,19 @@ export class WhatsAppCloudProvider implements MessagingProvider {
     }
   }
 
+  async marcarLido(messageId: string): Promise<void> {
+    // Best-effort: um recibo de leitura que falha não pode derrubar o turno.
+    try {
+      await this.post({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+      });
+    } catch {
+      // Sem retry: se o recibo não foi, no pior caso a conversa fica não lida.
+    }
+  }
+
   private async enviarTexto(telefone: string, texto: string): Promise<void> {
     await this.post({
       messaging_product: 'whatsapp',

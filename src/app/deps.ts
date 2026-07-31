@@ -103,6 +103,13 @@ export function montarProcessDeps(): ProcessAppDeps {
     },
   });
 
+  // Modo teste: só existe se NUMEROS_TESTE estiver setada. Em produção, deixe a
+  // variável ausente e o comando de reset simplesmente não existe.
+  const numerosTeste = (process.env.NUMEROS_TESTE ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
   const orquestrador: Deps = {
     contatos: new SupabaseContatoRepo(db),
     conversas: new SupabaseConversaRepo(db),
@@ -113,6 +120,7 @@ export function montarProcessDeps(): ProcessAppDeps {
     notifier: notifierLazy(),
     mensagens: new SupabaseMensagemRepo(db),
     agora: () => new Date().toISOString(),
+    ...(numerosTeste.length > 0 ? { numerosTeste } : {}),
   };
 
   return {
