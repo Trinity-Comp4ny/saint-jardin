@@ -46,12 +46,6 @@ export interface Slots {
   /** Preferência genérica quando o dia exato não foi dado ("fim de semana" / "dia de semana"). */
   preferenciaDia?: PreferenciaDia;
   convidados?: number;
-  /**
-   * A noiva pediu mini wedding em algum momento da conversa (não é dado do evento,
-   * mas mora aqui para persistir entre turnos: o pedido pode vir antes dos dados).
-   * Serve para explicar a regra do mini quando a escolha não se enquadra.
-   */
-  pediuMini?: boolean;
   /** Nome da noiva, quando ela se apresenta. Usado pelo Redator para personalizar. */
   nome?: string;
 }
@@ -62,11 +56,6 @@ export type EstadoConversa =
   | 'aguardando_nome'
   | 'aguardando_qualificacao'
   | 'aguardando_interesse_mini'
-  // dia de semana com mais de 80 convidados: explicamos que não cabe no mini e
-  // esperamos a noiva confirmar que quer receber a proposta normal.
-  | 'aguardando_confirmacao_normal'
-  // Confirmou a proposta normal (dia de semana > 80): agora só coletar data/ano.
-  | 'aguardando_data_normal'
   | 'proposta_enviada'
   // Visita (ADR-0005 rev. 30/07): o bot coleta e repassa; não marca.
   | 'aguardando_pref_visita' // noiva aceitou; coletando dia de preferência
@@ -139,12 +128,6 @@ export interface EntradaNLU {
    * insistir no convite.
    */
   negativo?: boolean;
-  /**
-   * A pessoa pediu explicitamente por "mini wedding" / "micro wedding". Serve para
-   * o bot explicar a regra (só dia de semana, até 80) quando o pedido não se
-   * enquadra, em vez de mandar a proposta normal calada.
-   */
-  pediuMini?: boolean;
   /** Preferência de visita, quando a conversa está no fluxo de agendamento. */
   visita?: PreferenciaVisita;
   nomeDetectado?: string;

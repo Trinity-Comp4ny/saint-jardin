@@ -62,7 +62,6 @@ const responseSchema = {
     intencao: { type: Type.STRING, enum: [...INTENCOES] },
     afirmativo: { type: Type.BOOLEAN, nullable: true },
     negativo: { type: Type.BOOLEAN, nullable: true },
-    pediuMini: { type: Type.BOOLEAN, nullable: true },
     visita: {
       type: Type.OBJECT,
       nullable: true,
@@ -128,7 +127,6 @@ const schema = z.object({
   intencao: z.enum(INTENCOES).default('seguir_fluxo'),
   afirmativo: z.boolean().optional(),
   negativo: z.boolean().optional(),
-  pediuMini: z.boolean().optional(),
   visita: z
     .object({
       diaSemana: z.enum(DIAS).optional(),
@@ -169,7 +167,6 @@ Extraia (deixe null o que a mensagem não disser):
   - "seguir_fluxo": caso geral. Inclui informar dados, cumprimentar, agradecer, dizer que vai mandar as informações, pedir um minuto/momento, ou pedir orçamento.
 - afirmativo: true quando a mensagem é uma resposta POSITIVA ou de aceite a uma pergunta de sim/não. Reconheça muitas formas, não só "sim": "quero", "pode mandar", "manda", "pode ser", "por favor", "claro", "com certeza", "aceito", "isso", "ok", "bora", "vamos", "sim por favor", "gostaria sim". Se a pessoa está claramente concordando/pedindo para prosseguir, marque true.
 - negativo: true quando a mensagem RECUSA ou nega uma pergunta de sim/não, ou adia. Reconheça muitas formas, não só "não": "por enquanto não", "agora não", "não obrigada", "depois", "deixa pra depois", "vou pensar", "ainda não", "talvez mais pra frente", "no momento não". Marque afirmativo OU negativo, nunca os dois. Se a mensagem traz um dado novo (uma data, um número, outra pergunta), não marque nenhum dos dois.
-- pediuMini: true quando a pessoa pede explicitamente por "mini wedding", "micro wedding" ou "mini casamento". Só isso; não deduza pelo número de convidados.
 - visita: SÓ quando o estado for "aguardando_pref_visita" (a noiva está dizendo que dia prefere para a visita ao espaço). Preencha:
   - visita.diaSemana: dia da semana que ela prefere (ex.: "quinta" -> quinta).
   - visita.periodo: "manha" ou "tarde", se ela indicar.
