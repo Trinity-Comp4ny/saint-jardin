@@ -39,57 +39,40 @@ describe('regras de negócio', () => {
 });
 
 describe('fluxo feliz - evento normal', () => {
-  it('no primeiro contato sem nome apresenta, manda PDF e pergunta o nome', () => {
+  it('1º contato sem nome: saudação pede o nome + PDF + qualificadora literal', () => {
     const r = decidir(conversaEm('novo'), nlu(), ctx);
-    expect(r.conversa.estado).toBe('aguardando_nome');
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas[0]?.texto).toMatch(/com quem eu falo/i);
     expect(r.saidas[1]?.pdf).toBe('apresentacao');
-    expect(r.saidas[2]?.texto).toMatch(/com quem/i);
+    // a mensagem após o PDF é a qualificadora oficial, literal (não humanizável)
+    expect(r.saidas[2]?.texto).toMatch(/Para orçamento, você poderia me informar a data e o ano/);
+    expect(r.saidas[2]?.humanizar).toBeFalsy();
   });
 
-  it('no primeiro contato com o nome já dado pula direto à qualificação', () => {
+  it('1º contato com o nome: saudação personaliza e não pede o nome', () => {
     const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Marina' }), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.conversa.slots.nome).toBe('Marina');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas[0]?.texto).toMatch(/Oii Marina, tudo bem/);
+    expect(r.saidas[0]?.texto).not.toMatch(/com quem/i);
+    expect(r.saidas[2]?.texto).toMatch(/Para orçamento/);
   });
 
-  it('no primeiro contato com nome + dados completos avança ao orçamento', () => {
+  it('1º contato NÃO manda proposta, mesmo com dados completos (guarda e cota depois)', () => {
     const r = decidir(
       conversaEm('novo'),
       nlu({ nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
-    expect(r.conversa.estado).toBe('proposta_enviada');
-    // apresentação + PDF apresentação + anúncio + PDF proposta + descrição + convite
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto', 'pdf', 'texto', 'texto']);
-    expect(r.saidas[1]?.pdf).toBe('apresentacao');
-    expect(r.saidas[3]?.pdf).toBe('proposta_2027');
-  });
-
-  it('dados completos SEM nome pedem o nome primeiro (não chega mandando proposta)', () => {
-    const r = decidir(
-      conversaEm('novo'),
-      nlu({ slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
-      ctx,
-    );
-    // Guarda os dados, mas o 1º turno é apresentação + pergunta do nome, sem PDF de proposta.
-    expect(r.conversa.estado).toBe('aguardando_nome');
+    // Abertura padrão (saudação + PDF + qualificadora); os dados ficam guardados.
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.conversa.slots.convidados).toBe(150);
     expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf !== 'apresentacao')).toBe(false);
-    expect(r.saidas.at(-1)?.texto).toMatch(/com quem/i);
-  });
-
-  it('no primeiro contato com nome + dado parcial, apresenta e pergunta só o que falta', () => {
-    const r = decidir(
-      conversaEm('novo'),
-      nlu({ nomeDetectado: 'Marina', slots: { diaSemana: 'sabado' } }),
-      ctx,
-    );
-    expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
-    // não repete a pergunta qualificadora inteira: pede só o que falta (convidados)
-    expect(r.saidas[2]?.texto).toContain('convidados');
+    // No turno seguinte, com os dados já em mãos, a proposta sai.
+    const r2 = decidir(r.conversa, nlu({ afirmativo: true }), ctx);
+    expect(r2.conversa.estado).toBe('proposta_enviada');
+    expect(r2.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
   });
 
   it('pede dados que faltam quando só veio o dia', () => {
@@ -233,11 +216,16 @@ describe('fim de semana com poucos convidados', () => {
 });
 
 describe('humanização (flag)', () => {
-  it('a pergunta qualificadora é humanizável', () => {
-    // Com o nome já dado, o primeiro contato vai direto à qualificação.
+  it('a pergunta qualificadora do 1º contato é LITERAL (não humanizável)', () => {
     const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Marina' }), ctx);
-    const q = r.saidas.find((s) => s.tipo === 'texto' && /convidados/.test(s.texto ?? ''));
-    expect(q?.humanizar).toBe(true);
+    const q = r.saidas.find((s) => s.tipo === 'texto' && /Para orçamento/.test(s.texto ?? ''));
+    expect(q).toBeDefined();
+    expect(q?.humanizar).toBeFalsy();
+  });
+
+  it('o pedido de dados que faltam (turnos seguintes) é humanizável', () => {
+    const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
+    expect(r.saidas[0]?.humanizar).toBe(true);
   });
 
   it('o orçamento (com preço) NÃO é humanizável', () => {
@@ -283,15 +271,17 @@ describe('visita de noiva (coleta e repassa)', () => {
     expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
   });
 
-  it('orçamento + visita na primeira mensagem (com nome) envia a proposta (não handoff silencioso)', () => {
+  it('orçamento + visita na 1ª mensagem: abre com qualificadora e cota no turno seguinte (não handoff)', () => {
     const r = decidir(
       conversaEm('novo'),
       nlu({ intencao: 'agendar_visita', nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
-    expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2027')).toBe(true);
-    expect(r.saidas.length).toBeGreaterThan(0);
+    // 1º turno é a abertura padrão; os dados ficam guardados.
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    const r2 = decidir(r.conversa, nlu({ afirmativo: true }), ctx);
+    expect(r2.conversa.estado).toBe('proposta_enviada');
+    expect(r2.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2027')).toBe(true);
   });
 
   it('aceite da visita pergunta a preferência de dia', () => {
@@ -305,16 +295,29 @@ describe('visita de noiva (coleta e repassa)', () => {
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
   });
 
-  it('com a preferência, repassa para a Raquel com o dia no motivo', () => {
+  it('só preferência (sem data concreta): não promete um dia, diz que vai ver na agenda', () => {
     const r = decidir(
       conversaEm('aguardando_pref_visita'),
-      nlu({ visita: { diaSemana: 'sabado', periodo: 'manha' } }),
+      nlu({ visita: { diaSemana: 'domingo', periodo: 'manha' } }),
       ctx,
     );
     expect(r.conversa.estado).toBe('handoff');
     expect(r.conversa.motivoHandoff).toMatch(/visita da noiva/);
-    expect(r.conversa.motivoHandoff).toMatch(/sabado/);
-    expect(r.saidas[0]?.texto).toMatch(/te retorno/i);
+    expect(r.conversa.motivoHandoff).toMatch(/domingo/);
+    // não diz "esse dia" (o bot não tem calendário nem uma data ainda)
+    expect(r.saidas[0]?.texto).toMatch(/ver um dia e horário/i);
+    expect(r.saidas[0]?.texto).not.toMatch(/esse dia/i);
+  });
+
+  it('dia e horário concretos: acusa o que ela pediu e repassa para a Raquel', () => {
+    const r = decidir(
+      conversaEm('aguardando_pref_visita'),
+      nlu({ visita: { dataHora: 'dia 12 às 10h' } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.motivoHandoff).toMatch(/dia 12 às 10h/);
+    expect(r.saidas[0]?.texto).toMatch(/anotei dia 12 às 10h/i);
   });
 });
 
@@ -494,22 +497,21 @@ describe('re-cotação na proposta', () => {
 });
 
 describe('coleta do nome da noiva', () => {
-  it('captura o nome respondido e segue para a qualificação', () => {
-    const r = decidir(conversaEm('aguardando_nome'), nlu({ nomeDetectado: 'Marina' }), ctx);
-    expect(r.conversa.slots.nome).toBe('Marina');
-    expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    // pede os dados do orçamento (dia/convidados), já que ela só deu o nome
-    expect(r.saidas[0]?.texto).toMatch(/convidados|sábado|dia de semana/i);
+  it('a saudação personaliza quando a noiva se apresenta na 1ª mensagem', () => {
+    const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Ester' }), ctx);
+    expect(r.conversa.slots.nome).toBe('Ester');
+    // saudação vira "Oii Ester, tudo bem?..." e NÃO pergunta o nome de novo
+    expect(r.saidas[0]?.texto).toMatch(/Oii Ester/);
+    expect(r.saidas[0]?.texto).not.toMatch(/com quem/i);
   });
 
-  it('não fica preso pedindo o nome se ela não responde com um', () => {
-    const r = decidir(conversaEm('aguardando_nome'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
-    expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    expect(r.conversa.slots.nome).toBeUndefined();
+  it('a saudação pergunta o nome quando ela ainda não se apresentou', () => {
+    const r = decidir(conversaEm('novo'), nlu(), ctx);
+    expect(r.saidas[0]?.texto).toMatch(/com quem eu falo/i);
   });
 
   it('o nome fica guardado nos slots entre turnos', () => {
-    const t1 = decidir(conversaEm('aguardando_nome'), nlu({ nomeDetectado: 'Ana' }), ctx);
+    const t1 = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Ana' }), ctx);
     const t2 = decidir(t1.conversa, nlu({ slots: { diaSemana: 'sabado', convidados: 200, ano: 2027 } }), ctx);
     expect(t2.conversa.slots.nome).toBe('Ana');
     expect(t2.conversa.estado).toBe('proposta_enviada');

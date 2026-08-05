@@ -115,6 +115,11 @@ export class SupabaseMensagemRepo implements MensagemRepo {
       }))
       .reverse();
   }
+
+  async limpar(telefone: string): Promise<void> {
+    // Best-effort: usado pelo #reset de teste; uma falha aqui não derruba o turno.
+    await this.db.from('mensagens').delete().eq('telefone', telefone);
+  }
 }
 
 export class SupabaseEventStore implements EventStore {

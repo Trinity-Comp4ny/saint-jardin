@@ -105,6 +105,19 @@ describe('comando de reset (modo teste)', () => {
     expect(r.conversa.estado).toBe('novo');
     expect(r.conversa.slots).toEqual({});
   });
+
+  it('o #reset apaga o histórico (o nome da noiva não ressuscita depois)', async () => {
+    deps.numerosTeste = [NOIVA];
+    const mensagens = new InMemoryMensagemRepo();
+    deps.mensagens = mensagens;
+
+    await processarMensagem(NOIVA, 'Oi, me chamo Ester', deps);
+    expect((await mensagens.historico(NOIVA, 20)).length).toBeGreaterThan(0);
+
+    await processarMensagem(NOIVA, '#reset', deps);
+    // Sem histórico, a NLU não tem como reler o "Ester" antigo no próximo turno.
+    expect(await mensagens.historico(NOIVA, 20)).toEqual([]);
+  });
 });
 
 describe('contexto: histórico chega à NLU', () => {

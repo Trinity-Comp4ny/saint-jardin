@@ -30,6 +30,12 @@ export interface PreferenciaVisita {
   periodo?: PeriodoVisita;
   /** "tanto faz" / "qualquer dia": deixa o bot propor o próximo horário livre. */
   indiferente?: boolean;
+  /**
+   * Texto natural do dia/horário CONCRETO que a noiva propôs para a visita (ex.:
+   * "dia 12 às 10h", "sábado 09/08 de manhã"). Só quando ela dá uma data específica,
+   * não uma preferência genérica ("domingo de manhã"). O bot repassa isso à Raquel.
+   */
+  dataHora?: string;
 }
 
 export interface Slots {
@@ -52,8 +58,6 @@ export interface Slots {
 
 export type EstadoConversa =
   | 'novo'
-  // Perguntamos o nome da noiva no primeiro contato e esperamos ela responder.
-  | 'aguardando_nome'
   | 'aguardando_qualificacao'
   | 'aguardando_interesse_mini'
   | 'proposta_enviada'
