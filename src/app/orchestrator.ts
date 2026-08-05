@@ -137,6 +137,9 @@ export async function processarMensagem(
   if (deps.numerosTeste?.includes(telefone) && ehComandoReset) {
     const zerada = novaConversa(telefone, deps.agora());
     await deps.conversas.salvar(zerada);
+    // Apaga o histórico também: senão a NLU/Redator releem os turnos antigos e
+    // ressuscitam dados já zerados (ex.: o nome da noiva reaparece no "oi" seguinte).
+    await deps.mensagens?.limpar(telefone);
     const aviso: MensagemSaida[] = [
       { tipo: 'texto', texto: 'Conversa zerada. Pode recomeçar o teste. 🧪' },
     ];

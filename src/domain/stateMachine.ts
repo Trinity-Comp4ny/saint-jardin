@@ -313,9 +313,11 @@ export function decidir(
 
   switch (conversa.estado) {
     case 'novo': {
-      // O primeiro contato sempre apresenta o espaço (texto + PDF).
+      // Primeiro contato: saudação (com o nome, ou pedindo o nome) + apresentação
+      // em PDF. A saudação já personaliza/pede o nome; a apresentação nunca é
+      // humanizada (texto de marca literal).
       const apresentacao: MensagemSaida[] = [
-        texto(MSG.apresentacao),
+        texto(MSG.apresentacao(slots.nome)),
         { tipo: 'pdf', pdf: 'apresentacao' },
       ];
 
@@ -335,27 +337,14 @@ export function decidir(
         };
       }
 
-      // Ainda não sabemos o nome: apresenta e pergunta o nome ANTES de qualquer
-      // coisa (mais humano e evita "chegar mandando proposta"). Os dados que ela
-      // porventura já deu ficam guardados nos slots e são usados no próximo turno.
-      if (!slots.nome) {
-        return {
-          conversa: { ...base, estado: 'aguardando_nome' },
-          saidas: [...apresentacao, pergunta(MSG.perguntaNome)],
-        };
-      }
-
-      // Já temos o nome (ela se apresentou de cara): apresenta e avança com o que
-      // veio, sem repetir pergunta (pede o que falta ou já manda a proposta).
-      const proximo = decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
-      return { conversa: proximo.conversa, saidas: [...apresentacao, ...proximo.saidas] };
+      // Abertura padrão: depois do PDF, a pergunta qualificadora LITERAL (texto
+      // oficial da Raquel, não humanizado). Os dados que ela já tenha adiantado
+      // ficam guardados nos slots e são usados quando ela responder.
+      return {
+        conversa: { ...base, estado: 'aguardando_qualificacao' },
+        saidas: [...apresentacao, texto(MSG.perguntaQualificadora)],
+      };
     }
-
-    case 'aguardando_nome':
-      // Já apresentamos e pedimos o nome. Capturamos o que veio (o nome está nos
-      // slots via mesclarSlots) e seguimos para a qualificação. Não ficamos presos
-      // pedindo o nome: se ela não disse, o fluxo continua mesmo assim.
-      return decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
 
     case 'aguardando_qualificacao': {
       const faltando: string[] = [];
@@ -434,12 +423,22 @@ export function decidir(
       // (antes o bot re-perguntava o convite a cada "não").
       return encerrar();
 
-    case 'aguardando_pref_visita':
+    case 'aguardando_pref_visita': {
       // Desistiu da visita ("não", "deixa pra depois"): encerra sem repassar.
       if (nlu.negativo) {
         return encerrar();
       }
-      // Coletamos a preferência (se veio) e repassamos para a Raquel agendar.
+      // A noiva deu um dia/horário CONCRETO: o bot não tem calendário, então só
+      // acusa o que ela pediu e repassa para a Raquel confirmar.
+      const quando = nlu.visita?.dataHora;
+      if (quando) {
+        return {
+          conversa: { ...base, estado: 'handoff', motivoHandoff: `visita da noiva (${quando})` },
+          saidas: [pergunta(MSG.visitaComData(quando))],
+        };
+      }
+      // Ela só deu preferência (ou deixou em aberto): o bot NÃO promete um dia,
+      // diz que vai ver na agenda e repassa a preferência (se houver) à Raquel.
       return {
         conversa: {
           ...base,
@@ -448,6 +447,7 @@ export function decidir(
         },
         saidas: [pergunta(MSG.visitaVouRetornar)],
       };
+    }
 
     case 'encerrada': {
       // Já agradecemos e paramos. Só reabrimos se a noiva voltar com algo

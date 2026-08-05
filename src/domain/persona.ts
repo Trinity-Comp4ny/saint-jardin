@@ -6,14 +6,19 @@ export const PERSONA = {
 } as const;
 
 export const MSG = {
-  apresentacao:
-    `Olá, tudo bem?! Me chamo ${PERSONA.nome}, muito prazer!\n` +
-    `Primeiramente, quero agradecer pelo contato. ☺️\n` +
-    `Vou te encaminhar nossa apresentação com as informações do espaço!`,
-
-  // Primeiro contato: depois de se apresentar, pergunta o nome da noiva. Só é
-  // usada quando ainda não sabemos o nome (a noiva não se apresentou sozinha).
-  perguntaNome: 'Antes de começarmos, com quem eu falo? 😊',
+  // Saudação do primeiro contato, determinística. Se já sabemos o nome (a noiva se
+  // apresentou), personaliza ("Oii Ester, tudo bem?..."); se não, cumprimenta e já
+  // pergunta o nome na própria saudação ("...muito prazer! Com quem eu falo?").
+  apresentacao: (nome?: string): string => {
+    const abertura = nome
+      ? `Oii ${nome}, tudo bem? Me chamo ${PERSONA.nome}, muito prazer!`
+      : `Olá, tudo bem?! Me chamo ${PERSONA.nome}, muito prazer! Com quem eu falo?`;
+    return (
+      `${abertura}\n` +
+      `Primeiramente, quero agradecer pelo contato. ☺️\n` +
+      `Vou te encaminhar nossa apresentação com as informações do espaço!`
+    );
+  },
 
   perguntaQualificadora:
     'Para orçamento, você poderia me informar a data e o ano do evento ' +
@@ -78,8 +83,16 @@ export const MSG = {
   perguntaPreferenciaVisita:
     'Você tem algum dia ou horário de preferência para fazer a visita?',
 
+  // A noiva NÃO deu um dia/horário fechado (só preferência ou deixou em aberto). O
+  // bot não tem acesso ao calendário, então NÃO promete "esse dia": diz que vai ver
+  // um dia e horário na agenda e repassa para a Raquel.
   visitaVouRetornar:
-    'Vou verificar minha agenda para esse dia e já te retorno para combinarmos, tá?',
+    'Vou ver um dia e horário na agenda e já te retorno para combinarmos, tá?',
+
+  // A noiva já deu um dia e horário concretos: o bot acusa o que ela pediu e
+  // repassa para a Raquel confirmar (o bot não fecha a agenda sozinho).
+  visitaComData: (quando: string): string =>
+    `Perfeito, anotei ${quando}. Vou confirmar com a Raquel e já te retorno, tá? ☺️`,
 
   // Visita técnica (fornecedor de casamento fechado): regra e validação.
   perguntaDataVisitaTecnica:

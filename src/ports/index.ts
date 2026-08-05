@@ -113,6 +113,12 @@ export interface MensagemRepo {
    * se a noiva perguntou "tudo bem?", etc. Best-effort; nunca deve derrubar o turno.
    */
   historico(telefone: string, limite: number): Promise<MensagemLog[]>;
+  /**
+   * Apaga o histórico do telefone. Usado pelo comando de teste `#reset`: sem isso,
+   * a NLU/Redator releem os turnos antigos e ressuscitam dados já zerados (ex.: o
+   * nome da noiva). Best-effort.
+   */
+  limpar(telefone: string): Promise<void>;
 }
 
 /** Avisa a Raquel que uma conversa precisa dela (Telegram/push em produção). */

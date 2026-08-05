@@ -69,6 +69,7 @@ const responseSchema = {
         diaSemana: { type: Type.STRING, enum: [...DIAS], nullable: true },
         periodo: { type: Type.STRING, enum: ['manha', 'tarde'], nullable: true },
         indiferente: { type: Type.BOOLEAN, nullable: true },
+        dataHora: { type: Type.STRING, nullable: true },
       },
     },
     nomeDetectado: { type: Type.STRING, nullable: true },
@@ -132,6 +133,7 @@ const schema = z.object({
       diaSemana: z.enum(DIAS).optional(),
       periodo: z.enum(['manha', 'tarde']).optional(),
       indiferente: z.boolean().optional(),
+      dataHora: z.string().optional(),
     })
     .optional(),
   nomeDetectado: z.string().optional(),
@@ -171,6 +173,7 @@ Extraia (deixe null o que a mensagem não disser):
   - visita.diaSemana: dia da semana que ela prefere (ex.: "quinta" -> quinta).
   - visita.periodo: "manha" ou "tarde", se ela indicar.
   - visita.indiferente: true se ela disser que tanto faz / qualquer dia / você que escolhe.
+  - visita.dataHora: SÓ quando ela dá um dia CONCRETO (uma data específica, tipo "dia 12", "15 de agosto", "sábado que vem") e/ou um horário ("às 10h", "10 da manhã"). Copie em texto curto e natural o que ela pediu (ex.: "dia 12 às 10h", "sábado 09/08 de manhã"). Deixe null se ela só deu uma preferência genérica de dia da semana/período (ex.: "domingo de manhã", "de tarde", "qualquer dia").
   Nesse estado, a intenção é "seguir_fluxo" ou "agendar_visita", a não ser que claramente negocie valor ou saia do assunto.
 - No estado "visita_tecnica_data" a pessoa está informando a DATA da visita técnica: extraia data/mesDia/ano normalmente e mantenha a intenção "visita_tecnica".
 - nomeDetectado: o PRIMEIRO nome da pessoa, sempre que ela se apresentar ("me chamo Maria", "sou a Ana", "aqui é a Júlia", "meu nome é Beatriz Souza" -> "Beatriz"). Só o nome dela; não invente nem extraia nome de terceiros (noivo, fornecedor). null se ela não se apresentou.

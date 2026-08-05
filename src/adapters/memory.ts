@@ -107,6 +107,10 @@ export class InMemoryMensagemRepo implements MensagemRepo {
     const arr = this.porTelefone.get(telefone) ?? [];
     return arr.slice(-limite);
   }
+
+  async limpar(telefone: string): Promise<void> {
+    this.porTelefone.delete(telefone);
+  }
 }
 
 export class RecordingNotifier implements Notifier {
