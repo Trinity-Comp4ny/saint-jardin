@@ -93,8 +93,6 @@ export function mesclarSlots(atual: Slots, novo: Slots): Slots {
     diaSemana: novo.diaSemana ?? atual.diaSemana,
     preferenciaDia: novo.preferenciaDia ?? atual.preferenciaDia,
     convidados: novo.convidados ?? atual.convidados,
-    // Uma vez que pediu mini, fica marcado (o pedido pode vir antes dos dados).
-    pediuMini: novo.pediuMini || atual.pediuMini || undefined,
     nome: novo.nome ?? atual.nome,
   };
 }
@@ -260,7 +258,6 @@ export function decidir(
 
   const slots = mesclarSlots(conversa.slots, {
     ...nlu.slots,
-    pediuMini: nlu.pediuMini || undefined,
     nome: nlu.nomeDetectado ?? undefined,
   });
   const base: Conversa = { ...conversa, slots, atualizadoEm: ctx.agora };
@@ -338,23 +335,18 @@ export function decidir(
         };
       }
 
-      // Nada de útil na 1ª mensagem. Se ainda não sabemos o nome, apresenta e
-      // pergunta o nome primeiro (mais humano); senão vai direto à qualificação.
-      if (!jaVeioAlgumDado) {
-        if (!slots.nome) {
-          return {
-            conversa: { ...base, estado: 'aguardando_nome' },
-            saidas: [...apresentacao, pergunta(MSG.perguntaNome)],
-          };
-        }
+      // Ainda não sabemos o nome: apresenta e pergunta o nome ANTES de qualquer
+      // coisa (mais humano e evita "chegar mandando proposta"). Os dados que ela
+      // porventura já deu ficam guardados nos slots e são usados no próximo turno.
+      if (!slots.nome) {
         return {
-          conversa: { ...base, estado: 'aguardando_qualificacao' },
-          saidas: [...apresentacao, pergunta(MSG.perguntaQualificadora)],
+          conversa: { ...base, estado: 'aguardando_nome' },
+          saidas: [...apresentacao, pergunta(MSG.perguntaNome)],
         };
       }
 
-      // A pessoa já adiantou informação (data, dia, convidados...): apresenta e
-      // já avança na qualificação com os dados que temos, sem repetir a pergunta.
+      // Já temos o nome (ela se apresentou de cara): apresenta e avança com o que
+      // veio, sem repetir pergunta (pede o que falta ou já manda a proposta).
       const proximo = decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
       return { conversa: proximo.conversa, saidas: [...apresentacao, ...proximo.saidas] };
     }
@@ -388,15 +380,7 @@ export function decidir(
         };
       }
 
-      // Pediu mini, mas escolheu fim de semana (mini é só dia de semana): explica
-      // a regra e oferece a proposta normal, sem mandar o PDF calado.
-      if (slots.pediuMini && classificarDia(slots) === 'fim_de_semana') {
-        return {
-          conversa: { ...base, estado: 'aguardando_confirmacao_normal' },
-          saidas: [texto(MSG.miniFimDeSemana)],
-        };
-      }
-
+      // Mini wedding é SÓ dia de semana até 80 convidados: aí oferecemos o mini.
       if (ehMiniWedding(slots)) {
         return {
           conversa: { ...base, estado: 'aguardando_interesse_mini' },
@@ -404,47 +388,11 @@ export function decidir(
         };
       }
 
-      // Dia de semana acima do limite do mini (>80): não cabe no mini. Explica e
-      // espera a noiva confirmar que quer a proposta normal antes de enviá-la.
-      if (classificarDia(slots) === 'dia_de_semana' && slots.convidados !== undefined) {
-        return {
-          conversa: { ...base, estado: 'aguardando_confirmacao_normal' },
-          saidas: [texto(MSG.explicaLimiteNormal(slots.convidados))],
-        };
-      }
-
-      // Fim de semana (valor normal): segue para a data e a proposta.
+      // Todo o resto (fim de semana, ou dia de semana com mais de 80) vai direto
+      // para a proposta normal, sem etapa de confirmação: o PDF já traz o valor de
+      // fim de semana e de evento grande de dia de semana. Regra confirmada pela Raquel.
       return avancarComData(base, slots, ctx);
     }
-
-    case 'aguardando_confirmacao_normal': {
-      // A noiva pode ter corrigido os dados (ex.: reduziu convidados) e agora caber no mini.
-      if (ehMiniWedding(slots)) {
-        return {
-          conversa: { ...base, estado: 'aguardando_interesse_mini' },
-          saidas: [texto(MSG.ofertaMini)],
-        };
-      }
-      if (nlu.afirmativo) {
-        // Confirmou: daqui é só coletar data/ano e mandar a proposta. Transiciona
-        // para um estado próprio para não voltar à qualificação (que re-explicaria
-        // o limite) nem repetir a explicação a cada resposta que não seja "sim".
-        return avancarComData({ ...base, estado: 'aguardando_data_normal' }, slots, ctx);
-      }
-      // Recusou receber a proposta: agradece e encerra, sem re-explicar em loop.
-      if (nlu.negativo) {
-        return encerrar();
-      }
-      // Sem "sim" nem "não" claro: reforça o convite à proposta, sem mandar o PDF ainda.
-      return {
-        conversa: base,
-        saidas: [texto(MSG.explicaLimiteNormal(slots.convidados ?? LIMITE_MINI_WEDDING))],
-      };
-    }
-
-    case 'aguardando_data_normal':
-      // Proposta normal já confirmada: só falta a data/ano para escolher o PDF.
-      return avancarComData(base, slots, ctx);
 
     case 'aguardando_interesse_mini':
       if (nlu.afirmativo) {
@@ -506,16 +454,19 @@ export function decidir(
       // concreto. As intenções que exigem humano (negociar, dúvida, fornecedor,
       // cliente fechado, visita técnica) já foram tratadas acima. Aqui cuidamos
       // de nova cotação e de aceite de visita.
-      if (trouxeDadoDeOrcamento(nlu) || slots.pediuMini) {
+      if (trouxeDadoDeOrcamento(nlu)) {
         return decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
       }
-      if (nlu.intencao === 'agendar_visita' || nlu.afirmativo) {
+      // Só reabre a visita num PEDIDO claro. Um "ok"/"tá" solto depois da despedida
+      // é só a noiva reconhecendo o encerramento, não um "sim, quero visitar":
+      // por isso NÃO reabrimos em afirmativo aqui (ficaríamos empurrando visita).
+      if (nlu.intencao === 'agendar_visita') {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
           saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
         };
       }
-      // Nada concreto (mais um "não", agradecimento, silêncio): fica quieto.
+      // Nada concreto (um "ok", "não", agradecimento, silêncio): fica quieto.
       return { conversa: base, saidas: [] };
     }
 

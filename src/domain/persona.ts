@@ -46,13 +46,6 @@ export const MSG = {
     return nome ? `Qual dia de ${nome} você pensou? ☺️` : 'Qual dia você pensou? ☺️';
   },
 
-  // Dia de semana com mais de 80 convidados: não cabe no mini. Explicamos o
-  // limite e esperamos a noiva confirmar que quer a proposta normal.
-  explicaLimiteNormal: (convidados: number): string =>
-    `Em dia de semana, nosso formato mini wedding atende até 80 convidados. ` +
-    `Para ${convidados} não se enquadra no mini, mas posso te passar nossa ` +
-    `proposta normal, que também vale para fim de semana. Quer que eu te envie? ☺️`,
-
   // Texto literal da Raquel, quebrado em duas mensagens (anúncio + descrição) para
   // não chegar como um paredão único. O PDF entra entre as duas. NÃO reescrever a
   // copy: só a divisão muda.
@@ -109,13 +102,6 @@ export const MSG = {
     'Sem problemas! Qualquer coisa sobre datas, valores ou uma visita, estou por aqui quando precisar. ☺️',
     'Tranquilo! Quando fizer sentido, me chama que a gente continua de onde parou. 🌿',
   ],
-
-  // A pessoa pediu mini wedding, mas escolheu fim de semana (o mini é só dia de
-  // semana). Explica a regra e oferece a proposta normal, sem mandar o PDF ainda.
-  miniFimDeSemana:
-    'O mini wedding é só para eventos de segunda a quinta-feira (até 80 ' +
-    'convidados). Para sábado ou domingo, o formato é a nossa proposta normal. ' +
-    'Quer que eu te envie o orçamento dela? ☺️',
 
   // Não é noiva buscando orçamento (fornecedor, parceria, imprensa): o bot avisa
   // que vai chamar a Raquel, em vez de empurrar o script de qualificação.

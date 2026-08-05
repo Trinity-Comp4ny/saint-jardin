@@ -54,10 +54,10 @@ describe('fluxo feliz - evento normal', () => {
     expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
   });
 
-  it('no primeiro contato já aproveita dados completos e avança ao orçamento', () => {
+  it('no primeiro contato com nome + dados completos avança ao orçamento', () => {
     const r = decidir(
       conversaEm('novo'),
-      nlu({ slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
+      nlu({ nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
@@ -67,8 +67,25 @@ describe('fluxo feliz - evento normal', () => {
     expect(r.saidas[3]?.pdf).toBe('proposta_2027');
   });
 
-  it('no primeiro contato com dado parcial, apresenta e pergunta só o que falta', () => {
-    const r = decidir(conversaEm('novo'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
+  it('dados completos SEM nome pedem o nome primeiro (não chega mandando proposta)', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
+      ctx,
+    );
+    // Guarda os dados, mas o 1º turno é apresentação + pergunta do nome, sem PDF de proposta.
+    expect(r.conversa.estado).toBe('aguardando_nome');
+    expect(r.conversa.slots.convidados).toBe(150);
+    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf !== 'apresentacao')).toBe(false);
+    expect(r.saidas.at(-1)?.texto).toMatch(/com quem/i);
+  });
+
+  it('no primeiro contato com nome + dado parcial, apresenta e pergunta só o que falta', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ nomeDetectado: 'Marina', slots: { diaSemana: 'sabado' } }),
+      ctx,
+    );
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
     // não repete a pergunta qualificadora inteira: pede só o que falta (convidados)
@@ -177,32 +194,22 @@ describe('fluxo mini wedding', () => {
 });
 
 describe('dia de semana acima do limite do mini', () => {
-  it('explica o limite e espera confirmação em vez de mandar a proposta', () => {
+  it('dia de semana com mais de 80 vai direto à proposta normal (sem confirmação)', () => {
+    // Tem dia + convidados; falta só o ano -> pergunta o ano, já no caminho normal.
     const r = decidir(
       conversaEm('aguardando_qualificacao'),
       nlu({ slots: { preferenciaDia: 'dia_de_semana', convidados: 200 } }),
       ctx,
     );
-    expect(r.conversa.estado).toBe('aguardando_confirmacao_normal');
-    expect(r.saidas).toHaveLength(1);
-    expect(r.saidas[0]?.texto).toMatch(/80 convidados/);
-    // não manda PDF antes de confirmar
-    expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.saidas[0]?.texto).toMatch(/2027 ou 2028|dia, mês e ano/i);
+    // não oferece mini nem pede confirmação de "quer que eu envie"
+    expect(r.saidas.some((s) => /mini wedding/i.test(s.texto ?? ''))).toBe(false);
   });
 
-  it('ao confirmar, pergunta a data e passa para aguardando_data_normal', () => {
+  it('com dia de semana, mais de 80 e o ano, manda a proposta normal direto', () => {
     const r = decidir(
-      conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
-      nlu({ afirmativo: true }),
-      ctx,
-    );
-    expect(r.saidas[0]?.texto).toMatch(/2027 ou 2028/);
-    expect(r.conversa.estado).toBe('aguardando_data_normal');
-  });
-
-  it('confirmado, o ano na sequência gera a proposta (sem repetir a explicação)', () => {
-    const r = decidir(
-      conversaEm('aguardando_data_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
+      conversaEm('aguardando_qualificacao', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
       nlu({ slots: { ano: 2027 } }),
       ctx,
     );
@@ -210,15 +217,18 @@ describe('dia de semana acima do limite do mini', () => {
     expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
     expect(r.saidas.some((s) => /mini wedding/i.test(s.texto ?? ''))).toBe(false);
   });
+});
 
-  it('se a noiva corrige para até 80, passa a oferecer o mini', () => {
+describe('fim de semana com poucos convidados', () => {
+  it('vai direto à proposta normal (mini é só dia de semana)', () => {
     const r = decidir(
-      conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 200 }),
-      nlu({ slots: { convidados: 60 } }),
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 50 }),
+      nlu({ slots: { ano: 2028 } }),
       ctx,
     );
-    expect(r.conversa.estado).toBe('aguardando_interesse_mini');
-    expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
+    expect(r.saidas.some((s) => /mini wedding/i.test(s.texto ?? ''))).toBe(false);
   });
 });
 
@@ -273,10 +283,10 @@ describe('visita de noiva (coleta e repassa)', () => {
     expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
   });
 
-  it('orçamento + visita na primeira mensagem envia a proposta (não handoff silencioso)', () => {
+  it('orçamento + visita na primeira mensagem (com nome) envia a proposta (não handoff silencioso)', () => {
     const r = decidir(
       conversaEm('novo'),
-      nlu({ intencao: 'agendar_visita', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
+      nlu({ intencao: 'agendar_visita', nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
@@ -438,15 +448,6 @@ describe('recusa e encerramento (mata o loop do convite)', () => {
     expect(r.conversa.motivoHandoff).toBeUndefined();
   });
 
-  it('recusa da proposta normal encerra sem re-explicar o limite', () => {
-    const r = decidir(
-      conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 150 }),
-      nlu({ negativo: true }),
-      ctx,
-    );
-    expect(r.conversa.estado).toBe('encerrada');
-  });
-
   it('despedida encerra em qualquer ponto', () => {
     const r = decidir(conversaEm('proposta_enviada'), nlu({ intencao: 'despedida' }), ctx);
     expect(r.conversa.estado).toBe('encerrada');
@@ -468,9 +469,15 @@ describe('recusa e encerramento (mata o loop do convite)', () => {
     expect(r.saidas).toHaveLength(0);
   });
 
-  it('encerrada reabre o convite de visita quando ela aceita depois', () => {
+  it('encerrada reabre o convite de visita quando ela PEDE a visita depois', () => {
     const r = decidir(conversaEm('encerrada'), nlu({ intencao: 'agendar_visita' }), ctx);
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
+  });
+
+  it('um "ok" de despedida em encerrada NÃO reabre a visita (fica quieto)', () => {
+    const r = decidir(conversaEm('encerrada'), nlu({ afirmativo: true }), ctx);
+    expect(r.conversa.estado).toBe('encerrada');
+    expect(r.saidas).toHaveLength(0);
   });
 });
 
@@ -483,28 +490,6 @@ describe('re-cotação na proposta', () => {
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2028')).toBe(true);
-  });
-});
-
-describe('mini wedding pedido em fim de semana', () => {
-  it('explica que o mini é só dia de semana e oferece a proposta normal', () => {
-    const r = decidir(
-      conversaEm('aguardando_qualificacao'),
-      nlu({ pediuMini: true, slots: { diaSemana: 'sabado', convidados: 50 } }),
-      ctx,
-    );
-    expect(r.conversa.estado).toBe('aguardando_confirmacao_normal');
-    expect(r.saidas[0]?.texto).toMatch(/mini wedding é só/i);
-  });
-
-  it('lembra do pedido de mini entre turnos (persistido nos slots)', () => {
-    // Turno 1: pede mini sem dados.
-    const t1 = decidir(conversaEm('novo'), nlu({ pediuMini: true }), ctx);
-    expect(t1.conversa.slots.pediuMini).toBe(true);
-    // Turno 2: informa sábado + convidados (sem repetir "mini") e ainda assim explica a regra.
-    const t2 = decidir(t1.conversa, nlu({ slots: { diaSemana: 'sabado', convidados: 50 } }), ctx);
-    expect(t2.conversa.estado).toBe('aguardando_confirmacao_normal');
-    expect(t2.saidas[0]?.texto).toMatch(/mini wedding é só/i);
   });
 });
 
