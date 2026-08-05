@@ -223,9 +223,10 @@ describe('humanização (flag)', () => {
     expect(q?.humanizar).toBeFalsy();
   });
 
-  it('o pedido de dados que faltam (turnos seguintes) é humanizável', () => {
+  it('o pedido de dados que faltam recebe verniz (humanizável) e usa "fechar"', () => {
     const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
     expect(r.saidas[0]?.humanizar).toBe(true);
+    expect(r.saidas[0]?.texto).toMatch(/fechar seu orçamento/i);
   });
 
   it('o orçamento (com preço) NÃO é humanizável', () => {

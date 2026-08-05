@@ -87,12 +87,12 @@ export const MSG = {
   // bot não tem acesso ao calendário, então NÃO promete "esse dia": diz que vai ver
   // um dia e horário na agenda e repassa para a Raquel.
   visitaVouRetornar:
-    'Vou ver um dia e horário na agenda e já te retorno para combinarmos, tá?',
+    'Vou ver um dia e horário na agenda e já te retorno para combinarmos, ok?',
 
   // A noiva já deu um dia e horário concretos: o bot acusa o que ela pediu e
   // repassa para a Raquel confirmar (o bot não fecha a agenda sozinho).
   visitaComData: (quando: string): string =>
-    `Perfeito, anotei ${quando}. Vou confirmar com a Raquel e já te retorno, tá? ☺️`,
+    `Perfeito, anotei ${quando}. Vou confirmar com a Raquel e já te retorno, ok? ☺️`,
 
   // Visita técnica (fornecedor de casamento fechado): regra e validação.
   perguntaDataVisitaTecnica:
@@ -106,7 +106,7 @@ export const MSG = {
         'antecedência. Consegue uma data um pouco mais para frente? ☺️',
 
   visitaTecnicaVouVerificar:
-    'Perfeito! Vou verificar a disponibilidade e já te retorno, tá? ☺️',
+    'Perfeito! Vou verificar a disponibilidade e já te retorno, ok? ☺️',
 
   // A noiva recusou o convite (ou se despediu). Agradece UMA vez, deixa a porta
   // aberta e para de puxar visita. NÃO termina com pergunta (não é um convite).
@@ -119,15 +119,15 @@ export const MSG = {
   // Não é noiva buscando orçamento (fornecedor, parceria, imprensa): o bot avisa
   // que vai chamar a Raquel, em vez de empurrar o script de qualificação.
   fornecedorEncaminhar:
-    'Entendi! Nesse caso vou chamar a Raquel para te atender diretinho, tá? ' +
+    'Entendi! Nesse caso vou chamar a Raquel para te atender diretinho, ok? ' +
     'Um instante. ☺️',
 
   pedirDadosFaltantes: (faltando: string[], i = 0): string => {
     const o = faltando.join(' e ');
     return [
-      `Só pra eu montar seu orçamento certinho, você pode me confirmar ${o}? ☺️`,
-      `Perfeito! Pra fechar seu orçamento, me confirma ${o}? 😊`,
-      `Legal! Só preciso saber ${o} pra seguir com seu orçamento. ☺️`,
+      `Só para fechar seu orçamento certinho, você pode me confirmar ${o}?`,
+      `Perfeito! Para fechar seu orçamento, me confirma ${o}?`,
+      `Legal! Só preciso saber ${o} para seguir com seu orçamento.`,
     ][i % 3] as string;
   },
 
