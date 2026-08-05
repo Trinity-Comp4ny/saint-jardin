@@ -7,12 +7,16 @@ export const PDF_CATALOGO: Record<TipoPdf, { arquivo: string; descricao: string 
     descricao: 'Apresentação do espaço',
   },
   proposta_2027: {
-    arquivo: 'Proposta Hospedagem Saint Jardin - 2027.pdf',
+    arquivo: 'Proposta Saint Jardin 2027.pdf',
     descricao: 'Proposta com hospedagem 2027',
   },
   proposta_2028: {
-    arquivo: 'Proposta hospedagem 2028.pdf',
+    arquivo: 'Proposta Saint Jardin 2028.pdf',
     descricao: 'Proposta com hospedagem 2028',
+  },
+  proposta_mini: {
+    arquivo: 'Proposta Mini Wedding.pdf',
+    descricao: 'Proposta de mini wedding (2027 e 2028)',
   },
 };
 

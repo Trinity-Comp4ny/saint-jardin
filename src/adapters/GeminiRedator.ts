@@ -4,7 +4,8 @@
 // nem regra (a máquina de estados garante isso via a flag `humanizar`).
 
 import { GoogleGenAI } from '@google/genai';
-import type { Redator } from '../ports';
+import type { MensagemLog, Redator } from '../ports';
+import { formatarHistorico } from './GeminiNLU';
 
 const MODELO = 'gemini-flash-lite-latest';
 
@@ -16,11 +17,13 @@ export function capitalizar(t: string): string {
 }
 
 const SYSTEM = `Você é a Raquel, atendente do Saint Jardin (espaço para casamentos). Fale como uma pessoa real no WhatsApp: gentil, natural, sem soar de robô.
-Você recebe: a última mensagem do cliente e um OBJETIVO (o que você precisa comunicar agora).
-Reescreva o OBJETIVO de forma humana:
-- Só responda a saudação ou "tudo bem?" SE a mensagem do cliente REALMENTE tiver isso. Se a mensagem for apenas uma informação (um dia, um número, uma data, uma resposta curta como "sim"), NÃO invente saudação nem "tudo bem por aqui" — vá direto ao OBJETIVO, de forma gentil e breve.
+Você recebe: o HISTÓRICO da conversa, a última mensagem do cliente e um OBJETIVO (o que você precisa comunicar agora).
+Reescreva o OBJETIVO de forma humana, usando o histórico para soar contextual (uma pessoa que lembra do que já foi dito):
+- Só responda a saudação ou "tudo bem?" SE a mensagem do cliente REALMENTE tiver isso. Aí sim, responda com naturalidade e reciprocidade ("Oi! Tudo ótimo, e com você?") ANTES de seguir ao OBJETIVO. Se a mensagem for apenas uma informação (um dia, um número, uma data, uma resposta curta como "sim"), NÃO invente saudação nem "tudo bem por aqui" — vá direto ao OBJETIVO, de forma gentil e breve.
+- Não repita uma saudação ou uma pergunta que, pelo histórico, você já fez há pouco: varie ou vá direto ao ponto.
 - Se o cliente disse que vai mandar as informações ou pediu um minuto, acolha sem repetir a pergunta de forma seca.
-- Mantenha a intenção do OBJETIVO (a pergunta ou o pedido continua).
+- Se um NOME do cliente for informado, você PODE usá-lo com naturalidade de vez em quando (ex.: "Prazer, Marina!" logo depois que ela se apresenta), mas sem repetir o nome em toda mensagem nem soar forçado.
+- Mantenha a intenção do OBJETIVO (a pergunta ou o pedido continua exatamente com o mesmo sentido).
 
 NATURALIDADE (muito importante):
 - VARIE as aberturas. NÃO comece com "Que ótimo", "Perfeito", "Legal" ou "Bacana" — evite interjeição animada; muitas vezes é melhor ir direto ao ponto.
@@ -44,6 +47,8 @@ export class GeminiRedator implements Redator {
     objetivo: string;
     mensagemCliente: string;
     jaSaudou?: boolean;
+    historico?: MensagemLog[];
+    nome?: string;
   }): Promise<string> {
     try {
       // Quando a saudação já foi (apresentação na mesma rajada), reforça a regra:
@@ -54,7 +59,9 @@ export class GeminiRedator implements Redator {
       const resp = await this.client.models.generateContent({
         model: MODELO,
         contents:
-          `Mensagem do cliente: "${entrada.mensagemCliente}"\n` +
+          `Conversa até aqui (mais antiga primeiro):\n${formatarHistorico(entrada.historico)}\n\n` +
+          (entrada.nome ? `Nome da noiva: ${entrada.nome}\n` : '') +
+          `Última mensagem do cliente: "${entrada.mensagemCliente}"\n` +
           `OBJETIVO (o que comunicar agora): "${entrada.objetivo}"${instrucaoSaudacao}`,
         config: {
           systemInstruction: SYSTEM,

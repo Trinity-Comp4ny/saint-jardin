@@ -39,11 +39,19 @@ describe('regras de negócio', () => {
 });
 
 describe('fluxo feliz - evento normal', () => {
-  it('no primeiro contato apresenta, manda PDF e pergunta', () => {
+  it('no primeiro contato sem nome apresenta, manda PDF e pergunta o nome', () => {
     const r = decidir(conversaEm('novo'), nlu(), ctx);
-    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.conversa.estado).toBe('aguardando_nome');
     expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
     expect(r.saidas[1]?.pdf).toBe('apresentacao');
+    expect(r.saidas[2]?.texto).toMatch(/com quem/i);
+  });
+
+  it('no primeiro contato com o nome já dado pula direto à qualificação', () => {
+    const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Marina' }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.conversa.slots.nome).toBe('Marina');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
   });
 
   it('no primeiro contato já aproveita dados completos e avança ao orçamento', () => {
@@ -53,8 +61,8 @@ describe('fluxo feliz - evento normal', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    // apresentação + PDF apresentação + orçamento + PDF proposta + convite
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto', 'pdf', 'texto']);
+    // apresentação + PDF apresentação + anúncio + PDF proposta + descrição + convite
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto', 'pdf', 'texto', 'texto']);
     expect(r.saidas[1]?.pdf).toBe('apresentacao');
     expect(r.saidas[3]?.pdf).toBe('proposta_2027');
   });
@@ -159,13 +167,12 @@ describe('fluxo mini wedding', () => {
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
   });
 
-  it('envia orçamento mini quando a noiva aceita', () => {
+  it('envia o PDF do mini quando a noiva aceita', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
+    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta) + convite de visita
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
-    // o preço (literal da Raquel) vai no texto do mini, não em PDF
-    expect(r.saidas[0]?.texto).toMatch(/27\.900/);
-    expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_mini');
   });
 });
 
@@ -217,7 +224,8 @@ describe('dia de semana acima do limite do mini', () => {
 
 describe('humanização (flag)', () => {
   it('a pergunta qualificadora é humanizável', () => {
-    const r = decidir(conversaEm('novo'), nlu(), ctx);
+    // Com o nome já dado, o primeiro contato vai direto à qualificação.
+    const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Marina' }), ctx);
     const q = r.saidas.find((s) => s.tipo === 'texto' && /convidados/.test(s.texto ?? ''));
     expect(q?.humanizar).toBe(true);
   });
@@ -232,10 +240,10 @@ describe('humanização (flag)', () => {
     expect(orc?.humanizar).toBeFalsy();
   });
 
-  it('o orçamento mini (com preço) NÃO é humanizável', () => {
+  it('o anúncio do orçamento mini NÃO é humanizável', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
-    const mini = r.saidas.find((s) => /27\.900/.test(s.texto ?? ''));
-    expect(mini?.humanizar).toBeFalsy();
+    const anuncio = r.saidas.find((s) => s.tipo === 'texto' && /segue PDF/i.test(s.texto ?? ''));
+    expect(anuncio?.humanizar).toBeFalsy();
   });
 });
 
@@ -391,10 +399,11 @@ describe('handoff', () => {
     expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
   });
 
-  it('sem aceite, reforça o convite à visita', () => {
+  it('sem sinal claro na proposta, encerra cordialmente (não re-convida em loop)', () => {
     const r = decidir(conversaEm('proposta_enviada'), nlu(), ctx);
-    expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas[0]?.texto).toMatch(/agendar um dia/i);
+    expect(r.conversa.estado).toBe('encerrada');
+    // Não repete o convite ("agendar um dia"): fica à disposição, sem pergunta de convite.
+    expect(r.saidas[0]?.texto).not.toMatch(/agendar um dia/i);
   });
 
   it('cliente já fechado transborda já no primeiro contato', () => {
@@ -406,5 +415,127 @@ describe('handoff', () => {
     const r = decidir(conversaEm('humano'), nlu({ intencao: 'negociar' }), ctx);
     expect(r.conversa.estado).toBe('humano');
     expect(r.saidas).toHaveLength(0);
+  });
+});
+
+describe('recusa e encerramento (mata o loop do convite)', () => {
+  it('recusa da visita na proposta encerra e não repete o convite', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ negativo: true }), ctx);
+    expect(r.conversa.estado).toBe('encerrada');
+    expect(r.saidas).toHaveLength(1);
+    expect(r.saidas[0]?.texto).not.toMatch(/agendar um dia/i);
+    expect(r.saidas[0]?.texto).toMatch(/disposição|à disposição|me chama/i);
+  });
+
+  it('recusa do mini encerra em vez de empurrar visita', () => {
+    const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ negativo: true }), ctx);
+    expect(r.conversa.estado).toBe('encerrada');
+  });
+
+  it('recusa na preferência de visita encerra sem repassar para a Raquel', () => {
+    const r = decidir(conversaEm('aguardando_pref_visita'), nlu({ negativo: true }), ctx);
+    expect(r.conversa.estado).toBe('encerrada');
+    expect(r.conversa.motivoHandoff).toBeUndefined();
+  });
+
+  it('recusa da proposta normal encerra sem re-explicar o limite', () => {
+    const r = decidir(
+      conversaEm('aguardando_confirmacao_normal', { preferenciaDia: 'dia_de_semana', convidados: 150 }),
+      nlu({ negativo: true }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('encerrada');
+  });
+
+  it('despedida encerra em qualquer ponto', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ intencao: 'despedida' }), ctx);
+    expect(r.conversa.estado).toBe('encerrada');
+  });
+
+  it('encerrada reabre quando volta com nova cotação', () => {
+    const r = decidir(
+      conversaEm('encerrada', { convidados: 150 }),
+      nlu({ slots: { diaSemana: 'sabado', ano: 2028 } }),
+      ctx,
+    );
+    // Reabre e chega direto na proposta (já tinha convidados; agora veio dia+ano).
+    expect(r.conversa.estado).toBe('proposta_enviada');
+  });
+
+  it('encerrada continua quieta diante de outro "não"', () => {
+    const r = decidir(conversaEm('encerrada'), nlu({ negativo: true }), ctx);
+    expect(r.conversa.estado).toBe('encerrada');
+    expect(r.saidas).toHaveLength(0);
+  });
+
+  it('encerrada reabre o convite de visita quando ela aceita depois', () => {
+    const r = decidir(conversaEm('encerrada'), nlu({ intencao: 'agendar_visita' }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+  });
+});
+
+describe('re-cotação na proposta', () => {
+  it('pergunta por outro ano depois da proposta re-cota (não ignora)', () => {
+    const r = decidir(
+      conversaEm('proposta_enviada', { diaSemana: 'sabado', convidados: 200, ano: 2027 }),
+      nlu({ slots: { ano: 2028 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2028')).toBe(true);
+  });
+});
+
+describe('mini wedding pedido em fim de semana', () => {
+  it('explica que o mini é só dia de semana e oferece a proposta normal', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao'),
+      nlu({ pediuMini: true, slots: { diaSemana: 'sabado', convidados: 50 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_confirmacao_normal');
+    expect(r.saidas[0]?.texto).toMatch(/mini wedding é só/i);
+  });
+
+  it('lembra do pedido de mini entre turnos (persistido nos slots)', () => {
+    // Turno 1: pede mini sem dados.
+    const t1 = decidir(conversaEm('novo'), nlu({ pediuMini: true }), ctx);
+    expect(t1.conversa.slots.pediuMini).toBe(true);
+    // Turno 2: informa sábado + convidados (sem repetir "mini") e ainda assim explica a regra.
+    const t2 = decidir(t1.conversa, nlu({ slots: { diaSemana: 'sabado', convidados: 50 } }), ctx);
+    expect(t2.conversa.estado).toBe('aguardando_confirmacao_normal');
+    expect(t2.saidas[0]?.texto).toMatch(/mini wedding é só/i);
+  });
+});
+
+describe('coleta do nome da noiva', () => {
+  it('captura o nome respondido e segue para a qualificação', () => {
+    const r = decidir(conversaEm('aguardando_nome'), nlu({ nomeDetectado: 'Marina' }), ctx);
+    expect(r.conversa.slots.nome).toBe('Marina');
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    // pede os dados do orçamento (dia/convidados), já que ela só deu o nome
+    expect(r.saidas[0]?.texto).toMatch(/convidados|sábado|dia de semana/i);
+  });
+
+  it('não fica preso pedindo o nome se ela não responde com um', () => {
+    const r = decidir(conversaEm('aguardando_nome'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.conversa.slots.nome).toBeUndefined();
+  });
+
+  it('o nome fica guardado nos slots entre turnos', () => {
+    const t1 = decidir(conversaEm('aguardando_nome'), nlu({ nomeDetectado: 'Ana' }), ctx);
+    const t2 = decidir(t1.conversa, nlu({ slots: { diaSemana: 'sabado', convidados: 200, ano: 2027 } }), ctx);
+    expect(t2.conversa.slots.nome).toBe('Ana');
+    expect(t2.conversa.estado).toBe('proposta_enviada');
+  });
+});
+
+describe('fornecedor / não-noiva', () => {
+  it('avisa que vai chamar a Raquel e transborda já no primeiro contato', () => {
+    const r = decidir(conversaEm('novo'), nlu({ intencao: 'fornecedor' }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.motivoHandoff).toMatch(/fornecedor/i);
+    expect(r.saidas[0]?.texto).toMatch(/chamar a Raquel/i);
   });
 });

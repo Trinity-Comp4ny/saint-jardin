@@ -11,6 +11,10 @@ export const MSG = {
     `Primeiramente, quero agradecer pelo contato. ☺️\n` +
     `Vou te encaminhar nossa apresentação com as informações do espaço!`,
 
+  // Primeiro contato: depois de se apresentar, pergunta o nome da noiva. Só é
+  // usada quando ainda não sabemos o nome (a noiva não se apresentou sozinha).
+  perguntaNome: 'Antes de começarmos, com quem eu falo? 😊',
+
   perguntaQualificadora:
     'Para orçamento, você poderia me informar a data e o ano do evento ' +
     '(se tem preferência por sábado, domingo ou dia de semana) e o número ' +
@@ -49,8 +53,11 @@ export const MSG = {
     `Para ${convidados} não se enquadra no mini, mas posso te passar nossa ` +
     `proposta normal, que também vale para fim de semana. Quer que eu te envie? ☺️`,
 
-  orcamentoNormal:
-    'Certo, segue PDF com orçamento:\n\n' +
+  // Texto literal da Raquel, quebrado em duas mensagens (anúncio + descrição) para
+  // não chegar como um paredão único. O PDF entra entre as duas. NÃO reescrever a
+  // copy: só a divisão muda.
+  orcamentoNormalAnuncio: 'Certo, segue PDF com orçamento:',
+  orcamentoNormalDescricao:
     'Oferecemos aos clientes 8hrs de evento.\n' +
     'Também incluímos no aluguel mesas e cadeiras para até 200 convidados, ' +
     '2 funcionários no dia do evento, luz de palco e pista, alguns móveis ' +
@@ -63,20 +70,10 @@ export const MSG = {
     'de semana (segunda a quinta-feira, exceto feriados ou vésperas). Teria ' +
     'interesse em receber?',
 
-  // Texto literal da Raquel (_chat.txt). Ao contrário do evento normal, o mini
-  // wedding não tem PDF: o preço vai na própria mensagem.
-  orcamentoMini:
-    'Certo, segue orçamento para mini wedding:\n\n' +
-    'Oferecemos aos clientes 6h de evento.\n' +
-    'Também incluímos no aluguel mesas e cadeiras para até 65 convidados, ' +
-    '1 funcionário no dia do evento, um salão com ar Toscano da Itália bem em ' +
-    'frente a nossa linda Capela, além de três opções de áreas de cerimônia.\n\n' +
-    '*proposta válida para eventos de segunda a quinta-feira (exceto feriados ' +
-    'e vésperas de feriado), com limite máximo de 65 convidados.\n\n' +
-    'O investimento para sua data é a partir de R$27.900,00 para 2027 ou ' +
-    'R$29.900,00 para 2028.\n\n' +
-    'Também posso oferecer alguns pacotes de hospedagem personalizados e ' +
-    'exclusivos na visita para entender qual proposta mais se adequa ao seu evento.',
+  // O mini wedding agora tem PDF próprio (2027 e 2028 na mesma proposta), então o
+  // preço e os detalhes vivem no arquivo, não na mensagem. Aqui vai só o anúncio
+  // curto que antecede o PDF, no mesmo formato do orçamento normal.
+  orcamentoMiniAnuncio: 'Certo, segue PDF com o orçamento do mini wedding:',
 
   conviteVisita:
     'Vamos agendar um dia para você conhecer nossa estrutura e analisar a ' +
@@ -104,6 +101,27 @@ export const MSG = {
 
   visitaTecnicaVouVerificar:
     'Perfeito! Vou verificar a disponibilidade e já te retorno, tá? ☺️',
+
+  // A noiva recusou o convite (ou se despediu). Agradece UMA vez, deixa a porta
+  // aberta e para de puxar visita. NÃO termina com pergunta (não é um convite).
+  encerramento: [
+    'Combinado! Fico à disposição. Se quiser retomar os valores, tirar dúvidas ou marcar uma visita, é só me chamar. 🌿',
+    'Sem problemas! Qualquer coisa sobre datas, valores ou uma visita, estou por aqui quando precisar. ☺️',
+    'Tranquilo! Quando fizer sentido, me chama que a gente continua de onde parou. 🌿',
+  ],
+
+  // A pessoa pediu mini wedding, mas escolheu fim de semana (o mini é só dia de
+  // semana). Explica a regra e oferece a proposta normal, sem mandar o PDF ainda.
+  miniFimDeSemana:
+    'O mini wedding é só para eventos de segunda a quinta-feira (até 80 ' +
+    'convidados). Para sábado ou domingo, o formato é a nossa proposta normal. ' +
+    'Quer que eu te envie o orçamento dela? ☺️',
+
+  // Não é noiva buscando orçamento (fornecedor, parceria, imprensa): o bot avisa
+  // que vai chamar a Raquel, em vez de empurrar o script de qualificação.
+  fornecedorEncaminhar:
+    'Entendi! Nesse caso vou chamar a Raquel para te atender diretinho, tá? ' +
+    'Um instante. ☺️',
 
   pedirDadosFaltantes: (faltando: string[], i = 0): string => {
     const o = faltando.join(' e ');

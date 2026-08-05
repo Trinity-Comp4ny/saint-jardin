@@ -6,20 +6,31 @@ import type {
   Calendario,
   ContatoRepository,
   ConversaRepository,
+  DirecaoMensagem,
+  MensagemLog,
+  MensagemRepo,
   MessagingProvider,
   Notifier,
+  TipoMensagemLog,
 } from '../ports';
 import type { Contato, Conversa, MensagemSaida } from '../domain/types';
 
 export class SandboxProvider implements MessagingProvider {
   public enviadas: { telefone: string; saidas: MensagemSaida[] }[] = [];
   public lidas: string[] = [];
+  public digitando: string[] = [];
 
   async enviar(telefone: string, saidas: MensagemSaida[]): Promise<void> {
     this.enviadas.push({ telefone, saidas });
   }
 
   async marcarLido(messageId: string): Promise<void> {
+    this.lidas.push(messageId);
+  }
+
+  async mostrarDigitando(messageId: string): Promise<void> {
+    // Typing = read na Cloud API, então registra nos dois (a caixa vira lida).
+    this.digitando.push(messageId);
     this.lidas.push(messageId);
   }
 }
@@ -72,6 +83,29 @@ export class MockCalendario implements Calendario {
       if (!this.ocupadas.has(iso)) return iso;
     }
     return dataISO;
+  }
+}
+
+export class InMemoryMensagemRepo implements MensagemRepo {
+  // Contador só para manter a ordem cronológica de forma estável nos testes
+  // (não usamos relógio real aqui).
+  private seq = 0;
+  private porTelefone = new Map<string, MensagemLog[]>();
+
+  async registrar(
+    telefone: string,
+    direcao: DirecaoMensagem,
+    tipo: TipoMensagemLog,
+    conteudo: string,
+  ): Promise<void> {
+    const arr = this.porTelefone.get(telefone) ?? [];
+    arr.push({ direcao, tipo, conteudo, criadoEm: String(this.seq++).padStart(6, '0') });
+    this.porTelefone.set(telefone, arr);
+  }
+
+  async historico(telefone: string, limite: number): Promise<MensagemLog[]> {
+    const arr = this.porTelefone.get(telefone) ?? [];
+    return arr.slice(-limite);
   }
 }
 

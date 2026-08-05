@@ -96,14 +96,11 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
       }
       const mensagem = partes.join('\n');
       if (mensagem) {
-        const { conversa } = await processarMensagem(telefone, mensagem, deps.orquestrador);
-        // Read/unread na caixa da Raquel: se a conversa precisa dela (handoff) ou
-        // já está com ela (humano), deixa NÃO LIDA para ela ver; caso contrário o
-        // bot resolveu sozinho, então marca a última mensagem do turno como lida.
-        if (conversa.estado !== 'handoff' && conversa.estado !== 'humano') {
-          const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
-          if (ultimoId) await deps.orquestrador.messaging.marcarLido(ultimoId);
-        }
+        // Passa o id da última mensagem da rajada: o orquestrador cuida do
+        // read/unread e do "digitando" (marca lido só quando o bot resolve, não
+        // em handoff, para a conversa que precisa da Raquel ficar não lida).
+        const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
+        await processarMensagem(telefone, mensagem, deps.orquestrador, ultimoId);
       }
     } finally {
       for (const item of grupo) await deps.fila.marcarProcessado(item.id);

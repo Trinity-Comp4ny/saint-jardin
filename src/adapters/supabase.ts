@@ -10,6 +10,7 @@ import type {
   EventStore,
   Fila,
   ItemFila,
+  MensagemLog,
   MensagemRepo,
   TipoMensagemLog,
 } from '../ports';
@@ -93,6 +94,26 @@ export class SupabaseMensagemRepo implements MensagemRepo {
       .from('mensagens')
       .insert({ telefone, direcao, tipo, conteudo });
     if (error) throw new Error(`registrar mensagem: ${error.message}`);
+  }
+
+  async historico(telefone: string, limite: number): Promise<MensagemLog[]> {
+    // Pega as últimas `limite` (ordem desc pelo índice) e devolve cronológico.
+    const { data, error } = await this.db
+      .from('mensagens')
+      .select('direcao, tipo, conteudo, criado_em')
+      .eq('telefone', telefone)
+      .order('criado_em', { ascending: false })
+      .limit(limite);
+    // Best-effort: o histórico é contexto, não pode derrubar o turno.
+    if (error || !data) return [];
+    return data
+      .map((m) => ({
+        direcao: m.direcao as DirecaoMensagem,
+        tipo: m.tipo as TipoMensagemLog,
+        conteudo: (m.conteudo as string | null) ?? '',
+        criadoEm: m.criado_em as string,
+      }))
+      .reverse();
   }
 }
 
