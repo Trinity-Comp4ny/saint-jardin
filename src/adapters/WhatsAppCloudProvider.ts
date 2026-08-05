@@ -17,6 +17,9 @@ export interface WhatsAppConfig {
   /** Pausa após um documento: a Meta entrega PDF mais devagar que texto, então
    *  esperamos mais para o PDF chegar antes da mensagem seguinte. */
   delayDepoisPdfMs?: number;
+  /** Pausa ANTES da primeira mensagem, para o "digitando…" ficar visível um
+   *  instante antes da resposta chegar. 0/ausente = sem pausa. */
+  delayInicioMs?: number;
 }
 
 export class WhatsAppCloudProvider implements MessagingProvider {
@@ -25,6 +28,9 @@ export class WhatsAppCloudProvider implements MessagingProvider {
   async enviar(telefone: string, saidas: MensagemSaida[]): Promise<void> {
     const entre = this.cfg.delayEntreMs ?? 1500;
     const depoisPdf = this.cfg.delayDepoisPdfMs ?? 4000;
+
+    // Deixa o "digitando…" aparecer um instante antes da primeira mensagem.
+    if (this.cfg.delayInicioMs) await sleep(this.cfg.delayInicioMs);
 
     // Sequencial para preservar a ordem das mensagens na conversa. O envio já é
     // ordenado, mas documentos são entregues mais devagar que texto: a pausa
@@ -55,6 +61,21 @@ export class WhatsAppCloudProvider implements MessagingProvider {
       });
     } catch {
       // Sem retry: se o recibo não foi, no pior caso a conversa fica não lida.
+    }
+  }
+
+  async mostrarDigitando(messageId: string): Promise<void> {
+    // O typing indicator da Cloud API vai junto do recibo de leitura (status:read)
+    // e dura ~25s ou até a próxima mensagem. Best-effort, como o marcarLido.
+    try {
+      await this.post({
+        messaging_product: 'whatsapp',
+        status: 'read',
+        message_id: messageId,
+        typing_indicator: { type: 'text' },
+      });
+    } catch {
+      // Falhou: no pior caso não aparece o "digitando" e a mensagem segue normal.
     }
   }
 

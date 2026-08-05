@@ -11,7 +11,12 @@ import type {
 
 /** Leitura da mensagem do lead (texto já transcrito, se veio de áudio). */
 export interface NLU {
-  analisar(texto: string, conversa: Conversa): Promise<EntradaNLU>;
+  /**
+   * `historico`: turnos anteriores (mais antigo primeiro), para o modelo entender
+   * o contexto desde a primeira mensagem, não só a frase atual. Opcional: sem ele,
+   * a leitura ainda funciona (degrada para o comportamento antigo).
+   */
+  analisar(texto: string, conversa: Conversa, historico?: MensagemLog[]): Promise<EntradaNLU>;
 }
 
 /**
@@ -26,6 +31,14 @@ export interface Redator {
     mensagemCliente: string;
     /** A saudação já foi enviada nesta rajada (ex.: apresentação): não saudar de novo. */
     jaSaudou?: boolean;
+    /**
+     * Turnos anteriores (mais antigo primeiro). Deixa a abertura social soar
+     * natural e contextual: responder um "tudo bem?", não repetir saudação já
+     * feita, acolher quem pediu um minuto. Nunca muda o núcleo do OBJETIVO.
+     */
+    historico?: MensagemLog[];
+    /** Nome da noiva, quando já sabido: o Redator pode usá-lo com naturalidade. */
+    nome?: string;
   }): Promise<string>;
 }
 
@@ -39,6 +52,13 @@ export interface MessagingProvider {
    * NUNCA deve derrubar o atendimento.
    */
   marcarLido(messageId: string): Promise<void>;
+  /**
+   * Mostra o indicador "digitando…" antes de o bot responder. Na Cloud API isso
+   * vem junto do recibo de leitura, então TAMBÉM marca a mensagem como lida: por
+   * isso só é usado quando o bot vai de fato responder (nunca em handoff, para a
+   * conversa que precisa da Raquel continuar não lida). Best-effort.
+   */
+  mostrarDigitando(messageId: string): Promise<void>;
 }
 
 /** Disponibilidade de datas de evento (calendário dedicado, só livre/ocupado). */
@@ -71,6 +91,14 @@ export interface ConversaRepository {
 export type DirecaoMensagem = 'entrada' | 'saida';
 export type TipoMensagemLog = 'texto' | 'pdf' | 'audio';
 
+/** Uma mensagem do histórico (para dar contexto à leitura e à redação). */
+export interface MensagemLog {
+  direcao: DirecaoMensagem;
+  tipo: TipoMensagemLog;
+  conteudo: string;
+  criadoEm: string;
+}
+
 /** Log de auditoria das mensagens trocadas (histórico por telefone). */
 export interface MensagemRepo {
   registrar(
@@ -79,6 +107,12 @@ export interface MensagemRepo {
     tipo: TipoMensagemLog,
     conteudo: string,
   ): Promise<void>;
+  /**
+   * Últimas `limite` mensagens do telefone, em ordem cronológica (mais antiga
+   * primeiro). Dá contexto à NLU e ao Redator: quem já saudou, o que já foi dito,
+   * se a noiva perguntou "tudo bem?", etc. Best-effort; nunca deve derrubar o turno.
+   */
+  historico(telefone: string, limite: number): Promise<MensagemLog[]>;
 }
 
 /** Avisa a Raquel que uma conversa precisa dela (Telegram/push em produção). */

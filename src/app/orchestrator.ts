@@ -8,6 +8,7 @@ import type {
   Calendario,
   ContatoRepository,
   ConversaRepository,
+  MensagemLog,
   MensagemRepo,
   MessagingProvider,
   Notifier,
@@ -60,6 +61,8 @@ async function humanizarSaidas(
   deps: Deps,
   saidas: MensagemSaida[],
   mensagemCliente: string,
+  historico: MensagemLog[],
+  nome?: string,
 ): Promise<MensagemSaida[]> {
   if (!deps.redator) return saidas;
   return Promise.all(
@@ -68,7 +71,13 @@ async function humanizarSaidas(
       // Se um texto (ex.: a apresentação, que já saúda) veio antes nesta mesma
       // rajada, a pergunta humanizada não deve saudar de novo (evita "olá" duplo).
       const jaSaudou = saidas.slice(0, i).some((a) => a.tipo === 'texto');
-      const texto = await deps.redator!.humanizar({ objetivo: s.texto, mensagemCliente, jaSaudou });
+      const texto = await deps.redator!.humanizar({
+        objetivo: s.texto,
+        mensagemCliente,
+        jaSaudou,
+        historico,
+        nome,
+      });
       return { ...s, texto };
     }),
   );
@@ -97,12 +106,35 @@ export async function processarMensagem(
   telefone: string,
   texto: string,
   deps: Deps,
+  /**
+   * ID da mensagem recebida na Cloud API (o último `mensagemId` da rajada). Usado
+   * para o read/unread e o "digitando": o bot mostra digitando (e marca lido) só
+   * quando VAI responder e NÃO é handoff; conversa que precisa da Raquel fica não
+   * lida. Ausente no sandbox/testes -> sem efeito de leitura.
+   */
+  messageId?: string,
 ): Promise<ResultadoProcessamento> {
+  // Histórico ANTES de registrar a mensagem atual: são os turnos anteriores, o
+  // contexto da conversa desde o começo. Best-effort (uma falha aqui não derruba
+  // o turno; a leitura degrada para "só a mensagem atual").
+  let historico: MensagemLog[] = [];
+  try {
+    historico = (await deps.mensagens?.historico(telefone, 20)) ?? [];
+  } catch {
+    historico = [];
+  }
+
   await deps.mensagens?.registrar(telefone, 'entrada', 'texto', texto);
 
   // Comando de teste: só vale para os números em `numerosTeste` (vazio em
   // produção, então inerte). Zera a conversa para recomeçar do 'novo'.
-  if (deps.numerosTeste?.includes(telefone) && COMANDOS_RESET.has(texto.trim().toLowerCase())) {
+  // A fila agrupa mensagens do mesmo turno com "\n" (ex.: "#reser\n#reset"), então
+  // checamos LINHA A LINHA: basta uma ser comando de reset para zerar. Antes, a
+  // string juntada não batia com o comando e o bot respondia contra o estado velho.
+  const ehComandoReset = texto
+    .split('\n')
+    .some((linha) => COMANDOS_RESET.has(linha.trim().toLowerCase()));
+  if (deps.numerosTeste?.includes(telefone) && ehComandoReset) {
     const zerada = novaConversa(telefone, deps.agora());
     await deps.conversas.salvar(zerada);
     const aviso: MensagemSaida[] = [
@@ -126,8 +158,8 @@ export async function processarMensagem(
     return transbordar(deps, conversaAtual, 'cliente que já fechou (por número)');
   }
 
-  // 2. Leitura da mensagem.
-  const nlu = await deps.nlu.analisar(texto, conversaAtual);
+  // 2. Leitura da mensagem, com o histórico como contexto.
+  const nlu = await deps.nlu.analisar(texto, conversaAtual, historico);
 
   // 3. Cliente fechado que escreve de número novo: casa por nome/data.
   if (nlu.intencao === 'cliente_fechado' || nlu.nomeDetectado || nlu.dataEventoDetectada) {
@@ -165,8 +197,16 @@ export async function processarMensagem(
 
   // 6. Efeitos de mensagem. Antes de enviar, humaniza as perguntas marcadas
   // (só as conversacionais; preço/proposta/regra vão literais).
-  const saidasFinais = await humanizarSaidas(deps, saidas, texto);
+  const saidasFinais = await humanizarSaidas(deps, saidas, texto, historico, conversa.slots.nome);
+
+  // Read/unread + "digitando" na caixa da Raquel. Só marcamos lido quando o bot
+  // resolve o turno (não é handoff): conversa que precisa da Raquel fica não lida.
+  const botResolveu = conversa.estado !== 'handoff' && conversa.estado !== 'humano';
   if (saidasFinais.length > 0) {
+    // Vai responder: mostra "digitando…" (que já marca lido) antes das mensagens.
+    // Em handoff que ainda responde algo (ex.: fornecedor), NÃO digita nem marca
+    // lido, para a conversa continuar não lida para a Raquel.
+    if (messageId && botResolveu) await deps.messaging.mostrarDigitando(messageId);
     await deps.messaging.enviar(telefone, saidasFinais);
     for (const s of saidasFinais) {
       await deps.mensagens?.registrar(
@@ -176,6 +216,9 @@ export async function processarMensagem(
         s.tipo === 'pdf' ? (s.pdf ?? '') : (s.texto ?? ''),
       );
     }
+  } else if (messageId && botResolveu) {
+    // Resolveu em silêncio (ex.: 'encerrada' já quieta): marca lido, sem digitar.
+    await deps.messaging.marcarLido(messageId);
   }
   await deps.conversas.salvar(conversa);
   // conversaAtual nunca é 'handoff' aqui (guardado no topo), então basta olhar o novo estado.

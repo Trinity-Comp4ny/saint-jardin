@@ -101,6 +101,8 @@ export function montarProcessDeps(): ProcessAppDeps {
       if (error || !data) throw new Error(`signed url do PDF ${tipo}: ${error?.message}`);
       return data.signedUrl;
     },
+    // Deixa o "digitando…" visível por um instante antes da primeira resposta.
+    delayInicioMs: 2500,
   });
 
   // Modo teste: só existe se NUMEROS_TESTE estiver setada. Em produção, deixe a

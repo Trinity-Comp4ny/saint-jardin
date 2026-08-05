@@ -4,8 +4,21 @@
 
 import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
-import type { NLU } from '../ports';
+import type { MensagemLog, NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
+
+/** Transcrição compacta do histórico para dar contexto ao modelo (mais antigo primeiro). */
+export function formatarHistorico(historico: MensagemLog[] = [], limite = 12): string {
+  const recentes = historico.slice(-limite);
+  if (recentes.length === 0) return '(sem histórico; é o começo da conversa)';
+  return recentes
+    .map((m) => {
+      const quem = m.direcao === 'entrada' ? 'Noiva' : 'Raquel';
+      const conteudo = m.tipo === 'pdf' ? '[enviou um PDF]' : m.conteudo;
+      return `${quem}: ${conteudo}`;
+    })
+    .join('\n');
+}
 
 // Flash-lite: mais barato e sem "thinking" por padrão (a extração é uma tarefa
 // simples e determinística, não precisa raciocínio). ~10x mais barato e ~3x mais
@@ -20,6 +33,8 @@ const INTENCOES = [
   'negociar',
   'fora_do_script',
   'cliente_fechado',
+  'despedida',
+  'fornecedor',
 ] as const;
 
 // Estrutura que o Gemini é OBRIGADO a devolver (structured output). Campos
@@ -46,6 +61,8 @@ const responseSchema = {
     },
     intencao: { type: Type.STRING, enum: [...INTENCOES] },
     afirmativo: { type: Type.BOOLEAN, nullable: true },
+    negativo: { type: Type.BOOLEAN, nullable: true },
+    pediuMini: { type: Type.BOOLEAN, nullable: true },
     visita: {
       type: Type.OBJECT,
       nullable: true,
@@ -110,6 +127,8 @@ const schema = z.object({
     .default({}),
   intencao: z.enum(INTENCOES).default('seguir_fluxo'),
   afirmativo: z.boolean().optional(),
+  negativo: z.boolean().optional(),
+  pediuMini: z.boolean().optional(),
   visita: z
     .object({
       diaSemana: z.enum(DIAS).optional(),
@@ -124,6 +143,11 @@ const schema = z.object({
 const SYSTEM = `Você é um extrator de informações de mensagens de noivas para o Saint Jardin (espaço de casamentos).
 Sua ÚNICA função é LER a mensagem e devolver os dados. Você NUNCA responde à noiva.
 
+Use o HISTÓRICO da conversa como contexto para interpretar a NOVA mensagem, especialmente:
+- respostas curtas ("sim", "não", "esse", "pode ser", "o segundo") só fazem sentido à luz da última pergunta da Raquel: marque afirmativo/negativo conforme o que ela está aceitando ou recusando.
+- referências ao que já foi dito ("e para 2028?", "e se for domingo?", "e mais barato?") reaproveitam os dados anteriores: extraia só o que mudou (aqui, o ano).
+- não re-extraia como convidados um número que já foi coletado, nem confunda o dia do evento com o nº de convidados (veja os dados já coletados).
+
 Extraia (deixe null o que a mensagem não disser):
 - slots.data: data do evento em ISO (yyyy-mm-dd) apenas se houver data completa com dia, mês e ano.
 - slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser dia E mês JUNTOS (ex.: "26 de janeiro" -> "01-26", "30 de outubro" -> "10-30"). Deixe null se ela já deu o ano (use data) ou se não citou dia e mês juntos.
@@ -137,18 +161,23 @@ Extraia (deixe null o que a mensagem não disser):
 - intencao:
   - "cliente_fechado": dá a entender que JÁ contratou/fechou o casamento.
   - "agendar_visita": a noiva/cliente quer conhecer o espaço (visita normal).
-  - "visita_tecnica": é um FORNECEDOR (buffet, decorador, assessoria) de um casamento já fechado querendo fazer uma VISITA TÉCNICA no espaço. Use só quando a pessoa fala explicitamente em "visita técnica" ou se identifica como fornecedor de um evento.
+  - "visita_tecnica": é um FORNECEDOR (buffet, decorador, assessoria) de um casamento JÁ FECHADO nesse espaço querendo fazer a VISITA TÉCNICA em si. Use só quando a pessoa fala explicitamente em "visita técnica" para um evento que vai acontecer aqui.
+  - "fornecedor": a pessoa NÃO é noiva buscando orçamento — é fornecedor, parceria comercial, imprensa, candidato a vaga ou similar, geralmente com dúvidas para tirar (ex.: "sou fornecedor, preciso tirar dúvidas", "trabalho com decoração e queria conversar", "sou de uma empresa e queria uma parceria"). Precisa de atendimento humano. Não confunda com "visita_tecnica".
   - "negociar": quer desconto, parcelamento ou mudar condição de valor.
+  - "despedida": está encerrando o assunto ou se despedindo, sem pedir mais nada ("obrigada, era só isso", "por enquanto é isso", "depois eu vejo", "vou pensar e te aviso", "tchau", "valeu"). Diferente de uma dúvida nova.
   - "fora_do_script": uma PERGUNTA concreta que foge do atendimento padrão (ex.: "tem buffet?", "tem estacionamento?", "qual o endereço?", "aceita pet?"). NÃO use para saudações, agradecimentos, nem quando a pessoa só diz que vai responder, pede um minuto ou manda uma mensagem social — isso é "seguir_fluxo".
   - "seguir_fluxo": caso geral. Inclui informar dados, cumprimentar, agradecer, dizer que vai mandar as informações, pedir um minuto/momento, ou pedir orçamento.
 - afirmativo: true quando a mensagem é uma resposta POSITIVA ou de aceite a uma pergunta de sim/não. Reconheça muitas formas, não só "sim": "quero", "pode mandar", "manda", "pode ser", "por favor", "claro", "com certeza", "aceito", "isso", "ok", "bora", "vamos", "sim por favor", "gostaria sim". Se a pessoa está claramente concordando/pedindo para prosseguir, marque true.
+- negativo: true quando a mensagem RECUSA ou nega uma pergunta de sim/não, ou adia. Reconheça muitas formas, não só "não": "por enquanto não", "agora não", "não obrigada", "depois", "deixa pra depois", "vou pensar", "ainda não", "talvez mais pra frente", "no momento não". Marque afirmativo OU negativo, nunca os dois. Se a mensagem traz um dado novo (uma data, um número, outra pergunta), não marque nenhum dos dois.
+- pediuMini: true quando a pessoa pede explicitamente por "mini wedding", "micro wedding" ou "mini casamento". Só isso; não deduza pelo número de convidados.
 - visita: SÓ quando o estado for "aguardando_pref_visita" (a noiva está dizendo que dia prefere para a visita ao espaço). Preencha:
   - visita.diaSemana: dia da semana que ela prefere (ex.: "quinta" -> quinta).
   - visita.periodo: "manha" ou "tarde", se ela indicar.
   - visita.indiferente: true se ela disser que tanto faz / qualquer dia / você que escolhe.
   Nesse estado, a intenção é "seguir_fluxo" ou "agendar_visita", a não ser que claramente negocie valor ou saia do assunto.
 - No estado "visita_tecnica_data" a pessoa está informando a DATA da visita técnica: extraia data/mesDia/ano normalmente e mantenha a intenção "visita_tecnica".
-- nomeDetectado / dataEventoDetectada: se a pessoa se identificar como cliente já fechado.`;
+- nomeDetectado: o PRIMEIRO nome da pessoa, sempre que ela se apresentar ("me chamo Maria", "sou a Ana", "aqui é a Júlia", "meu nome é Beatriz Souza" -> "Beatriz"). Só o nome dela; não invente nem extraia nome de terceiros (noivo, fornecedor). null se ela não se apresentou.
+- dataEventoDetectada: a data do evento quando a pessoa dá a entender que é cliente já fechado (para casar o cadastro dela).`;
 
 export class GeminiNLU implements NLU {
   private client: GoogleGenAI;
@@ -158,13 +187,18 @@ export class GeminiNLU implements NLU {
     this.client = new GoogleGenAI({ apiKey });
   }
 
-  async analisar(texto: string, conversa: Conversa): Promise<EntradaNLU> {
+  async analisar(
+    texto: string,
+    conversa: Conversa,
+    historico: MensagemLog[] = [],
+  ): Promise<EntradaNLU> {
     const resp = await this.client.models.generateContent({
       model: MODELO,
       contents:
+        `Conversa até aqui (mais antiga primeiro):\n${formatarHistorico(historico)}\n\n` +
         `Estado atual da conversa: ${conversa.estado}.\n` +
         `Dados já coletados: ${JSON.stringify(conversa.slots)}.\n` +
-        `Mensagem da noiva: "${texto}"`,
+        `NOVA mensagem da noiva (é esta que você deve interpretar, usando o histórico só como contexto): "${texto}"`,
       config: {
         systemInstruction: SYSTEM,
         responseMimeType: 'application/json',

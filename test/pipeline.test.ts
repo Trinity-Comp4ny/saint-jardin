@@ -127,5 +127,37 @@ describe('processarFila — lida/não-lida na caixa da Raquel', () => {
     await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
 
     expect(messaging.lidas).toEqual([]);
+    expect(messaging.digitando).toEqual([]);
+  });
+
+  it('mostra "digitando" na última mensagem quando o bot vai responder', async () => {
+    const { fila } = filaCom([
+      item('1', '5511999', 'oi', 'wamid.A'),
+      item('2', '5511999', 'quero orçamento', 'wamid.B'),
+    ]);
+    const { nlu } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const deps: Deps = { ...orquestrador(nlu), messaging };
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    // Digita antes de responder (e isso já marca lido) no id da última da rajada.
+    expect(messaging.digitando).toEqual(['wamid.B']);
+    expect(messaging.enviadas.length).toBeGreaterThan(0);
+  });
+
+  it('não mostra "digitando" no handoff (conversa fica não lida)', async () => {
+    const { fila } = filaCom([item('1', '5511999990000', 'oi, dúvida', 'wamid.C')]);
+    const { nlu } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const deps: Deps = {
+      ...orquestrador(nlu),
+      messaging,
+      contatos: new InMemoryContatoRepo([{ telefone: '5511999990000', status: 'fechado' }]),
+    };
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    expect(messaging.digitando).toEqual([]);
   });
 });
