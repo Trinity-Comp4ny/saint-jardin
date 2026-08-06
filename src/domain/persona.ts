@@ -29,26 +29,30 @@ export const MSG = {
   // frase quando a noiva responde algo que não avança (a 1ª é a "canônica").
   // Imperativa e pedindo tudo de uma vez: uma pergunta de sim/não ("já tem data
   // em mente?") faz a noiva responder "sim" sem avançar, virando loop.
+  // Pergunta aberta pela data. Convida a data exata, mas deixa claro que só o ano
+  // (2027 ou 2028) já basta para o orçamento — assim ninguém fica travado sem
+  // saber o dia. Evita pergunta de sim/não ("já tem data?"), que vira loop de "sim".
   perguntaData: [
-    'Qual a data que você pensou para o casamento? Me diz o dia, o mês e o ano (2027 ou 2028). ☺️',
-    'Me conta a data do evento: dia, mês e ano (2027 ou 2028)? 😊',
-    'Para seguir com seu orçamento, qual o dia, mês e ano (2027 ou 2028) do casamento?',
+    'Qual a data que você está planejando para o evento? Se ainda não tiver o dia, só o ano (2027 ou 2028) já me ajuda com o orçamento.',
+    'Qual a data do evento? Pode ser dia, mês e ano, ou só o ano (2027 ou 2028) por enquanto.',
+    'Para seguir com o orçamento, qual a data do evento (ou pelo menos o ano, 2027 ou 2028)?',
   ],
 
   perguntaAno: [
     'E o evento seria para qual ano, 2027 ou 2028?',
-    'Só me confirma o ano, por favor: 2027 ou 2028? ☺️',
+    'Só me confirma o ano, por favor: 2027 ou 2028?',
   ],
 
-  // Já sabemos o mês (a noiva disse "outubro") e falta o dia: pergunta direto o
-  // dia daquele mês, em vez de repetir a pergunta genérica de data.
+  // A noiva disse só o mês ("outubro"): pergunta o dia daquele mês, mas convida o
+  // ano como alternativa, para não ficar preso pedindo um dia que ela talvez não tenha.
   perguntaDiaDoMes: (mes: number): string => {
     const nomes = [
       'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
       'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
     ];
     const nome = nomes[mes - 1];
-    return nome ? `Qual dia de ${nome} você pensou? ☺️` : 'Qual dia você pensou? ☺️';
+    const base = nome ? `Qual dia de ${nome} você está pensando?` : 'Qual dia você está pensando?';
+    return `${base} Se ainda não decidiu o dia, me diz só o ano (2027 ou 2028) que já sigo com o orçamento.`;
   },
 
   // Texto literal da Raquel, quebrado em duas mensagens (anúncio + descrição) para

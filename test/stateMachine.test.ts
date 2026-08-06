@@ -4,6 +4,7 @@ import {
   decidir,
   ehMiniWedding,
   novaConversa,
+  resumoEvento,
   type ContextoDecisao,
 } from '../src/domain/stateMachine';
 import type { Conversa, EntradaNLU } from '../src/domain/types';
@@ -525,5 +526,33 @@ describe('fornecedor / não-noiva', () => {
     expect(r.conversa.estado).toBe('handoff');
     expect(r.conversa.motivoHandoff).toMatch(/fornecedor/i);
     expect(r.saidas[0]?.texto).toMatch(/chamar a Raquel/i);
+  });
+});
+
+describe('resumo do evento para a Raquel', () => {
+  it('data completa, dia da semana e convidados', () => {
+    expect(resumoEvento({ data: '2028-10-15', diaSemana: 'sabado', convidados: 200 }))
+      .toBe('15/10/2028 · sábado · 200 convidados');
+  });
+
+  it('só o ano (o suficiente pro orçamento)', () => {
+    expect(resumoEvento({ ano: 2028 })).toBe('2028');
+  });
+
+  it('mês sem ano fica "a definir"', () => {
+    expect(resumoEvento({ mes: 10, convidados: 80 })).toBe('outubro (ano a definir) · 80 convidados');
+  });
+
+  it('dia/mês (mesDia) com ano vira data cheia', () => {
+    expect(resumoEvento({ mesDia: '10-30', ano: 2027 })).toBe('30/10/2027');
+  });
+
+  it('preferência genérica quando não há dia da semana exato', () => {
+    expect(resumoEvento({ ano: 2027, preferenciaDia: 'dia_de_semana', convidados: 60 }))
+      .toBe('2027 · dia de semana · 60 convidados');
+  });
+
+  it('vazio quando nada foi coletado', () => {
+    expect(resumoEvento({})).toBe('');
   });
 });

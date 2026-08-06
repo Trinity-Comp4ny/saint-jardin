@@ -97,6 +97,60 @@ export function mesclarSlots(atual: Slots, novo: Slots): Slots {
   };
 }
 
+const MESES_PT = [
+  'janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro',
+] as const;
+
+const DIA_SEMANA_LABEL: Record<string, string> = {
+  segunda: 'segunda-feira',
+  terca: 'terça-feira',
+  quarta: 'quarta-feira',
+  quinta: 'quinta-feira',
+  sexta: 'sexta-feira',
+  sabado: 'sábado',
+  domingo: 'domingo',
+};
+
+/** Descreve, para humano, o "quando" que já se sabe do evento (o mais preciso possível). */
+function descreverQuando(slots: Slots): string {
+  if (slots.data) {
+    const [y, m, d] = slots.data.slice(0, 10).split('-');
+    return `${d}/${m}/${y}`;
+  }
+  if (slots.mesDia) {
+    const [m, d] = slots.mesDia.split('-');
+    return slots.ano ? `${d}/${m}/${slots.ano}` : `${d}/${m} (ano a definir)`;
+  }
+  if (slots.mes) {
+    const nome = MESES_PT[slots.mes - 1] ?? `mês ${slots.mes}`;
+    return slots.ano ? `${nome} de ${slots.ano}` : `${nome} (ano a definir)`;
+  }
+  if (slots.ano) return `${slots.ano}`;
+  if (slots.dia) return `dia ${slots.dia} (mês/ano a definir)`;
+  return '';
+}
+
+/**
+ * Resumo do evento a partir dos slots, para o alerta da Raquel (Telegram): data/ano,
+ * dia da semana (ou preferência) e convidados. Vazio se nada foi coletado.
+ */
+export function resumoEvento(slots: Slots): string {
+  const partes: string[] = [];
+  const quando = descreverQuando(slots);
+  if (quando) partes.push(quando);
+  const dia = slots.diaSemana
+    ? DIA_SEMANA_LABEL[slots.diaSemana]
+    : slots.preferenciaDia === 'fim_de_semana'
+      ? 'fim de semana'
+      : slots.preferenciaDia === 'dia_de_semana'
+        ? 'dia de semana'
+        : undefined;
+  if (dia) partes.push(dia);
+  if (slots.convidados !== undefined) partes.push(`${slots.convidados} convidados`);
+  return partes.join(' · ');
+}
+
 /** Ano do evento, seja informado direto ou deduzido de uma data completa. */
 export function anoEfetivo(slots: Slots): Ano | undefined {
   if (slots.ano) return slots.ano;
