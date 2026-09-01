@@ -13,8 +13,12 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 export async function GET(req: Request): Promise<Response> {
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  // Sem o token configurado, nunca valida o handshake (falha fechado: string
+  // vazia como fallback deixaria "hub.verify_token=" vazio passar).
+  if (!verifyToken) return new Response('forbidden', { status: 403 });
   const params = new URL(req.url).searchParams;
-  const challenge = verificarHandshake(params, process.env.WHATSAPP_VERIFY_TOKEN ?? '');
+  const challenge = verificarHandshake(params, verifyToken);
   if (challenge) return new Response(challenge, { status: 200 });
   return new Response('forbidden', { status: 403 });
 }
@@ -22,8 +26,11 @@ export async function GET(req: Request): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   const corpoBruto = await req.text();
   const assinatura = req.headers.get('x-hub-signature-256');
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
 
-  if (!assinaturaValida(corpoBruto, assinatura, process.env.WHATSAPP_APP_SECRET ?? '')) {
+  // Sem o secret configurado, nunca valida (falha fechado: string vazia como
+  // fallback tornaria a assinatura previsível/calculável por qualquer um).
+  if (!appSecret || !assinaturaValida(corpoBruto, assinatura, appSecret)) {
     return new Response('invalid signature', { status: 401 });
   }
 
@@ -45,6 +52,8 @@ export async function POST(req: Request): Promise<Response> {
     agora: () => new Date().toISOString(),
     delaySegundos: teste ? 0 : Number(process.env.DELAY_SEGUNDOS ?? '60'),
     jitterSegundos: teste ? 0 : Number(process.env.JITTER_SEGUNDOS ?? '0'),
+    limiteMensagens: Number(process.env.RATE_LIMIT_MAX_MENSAGENS ?? '30'),
+    janelaLimiteMinutos: Number(process.env.RATE_LIMIT_JANELA_MINUTOS ?? '60'),
   });
 
   if (teste && enfileiradas > 0) {

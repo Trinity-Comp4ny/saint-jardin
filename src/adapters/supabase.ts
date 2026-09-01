@@ -181,6 +181,16 @@ export class SupabaseFila implements Fila {
       .update({ processado_em: new Date().toISOString() })
       .eq('id', id);
   }
+
+  async contarRecentes(telefone: string, desdeISO: string): Promise<number> {
+    const { count, error } = await this.db
+      .from('fila_mensagens')
+      .select('id', { count: 'exact', head: true })
+      .eq('telefone', telefone)
+      .gte('criado_em', desdeISO);
+    if (error) throw new Error(`contarRecentes: ${error.message}`);
+    return count ?? 0;
+  }
 }
 
 /**

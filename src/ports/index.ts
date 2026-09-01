@@ -155,4 +155,6 @@ export interface Fila {
   enfileirar(item: Omit<ItemFila, 'id'>): Promise<void>;
   pegarVencidas(agoraISO: string, limite: number): Promise<ItemFila[]>;
   marcarProcessado(id: string): Promise<void>;
+  /** Nº de itens enfileirados por esse telefone desde `desdeISO` (rate limit). */
+  contarRecentes(telefone: string, desdeISO: string): Promise<number>;
 }

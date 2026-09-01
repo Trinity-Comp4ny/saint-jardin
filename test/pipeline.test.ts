@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { processarFila } from '../src/app/pipeline';
+import { ingerirWebhook, processarFila } from '../src/app/pipeline';
 import type { Deps } from '../src/app/orchestrator';
 import {
   InMemoryContatoRepo,
@@ -8,7 +8,7 @@ import {
   RecordingNotifier,
   SandboxProvider,
 } from '../src/adapters/memory';
-import type { Fila, ItemFila, NLU, Transcriber } from '../src/ports';
+import type { EventStore, Fila, ItemFila, NLU, Transcriber } from '../src/ports';
 import type { Conversa, EntradaNLU } from '../src/domain/types';
 import { MSG } from '../src/domain/persona';
 
@@ -23,6 +23,9 @@ function filaCom(itens: ItemFila[]): { fila: Fila; processados: string[] } {
       },
       async marcarProcessado(id) {
         processados.push(id);
+      },
+      async contarRecentes() {
+        return 0;
       },
     },
   };
@@ -208,5 +211,98 @@ describe('processarFila — falha ao transcrever áudio', () => {
 
     const conversa = await conversas.obter('5511999');
     expect(conversa?.estado).toBe('handoff');
+  });
+});
+
+function eventStoreVazio(): EventStore {
+  const vistos = new Set<string>();
+  return {
+    async jaVisto(id) {
+      return vistos.has(id);
+    },
+    async marcar(id) {
+      vistos.add(id);
+    },
+  };
+}
+
+function filaParaIngestao(contarRecentesRetorno = 0): {
+  fila: Fila;
+  enfileiradas: { telefone: string; conteudo: string }[];
+} {
+  const enfileiradas: { telefone: string; conteudo: string }[] = [];
+  return {
+    enfileiradas,
+    fila: {
+      async enfileirar(item) {
+        enfileiradas.push({ telefone: item.telefone, conteudo: item.conteudo });
+      },
+      async pegarVencidas() {
+        return [];
+      },
+      async marcarProcessado() {},
+      async contarRecentes() {
+        return contarRecentesRetorno;
+      },
+    },
+  };
+}
+
+function webhookTexto(id: string, from: string, texto: string): unknown {
+  return {
+    entry: [
+      { changes: [{ value: { messages: [{ id, from, type: 'text', text: { body: texto } }] } }] },
+    ],
+  };
+}
+
+describe('ingerirWebhook — rate limit por telefone (ADR-0009)', () => {
+  it('enfileira normalmente quando está abaixo do limite', async () => {
+    const { fila, enfileiradas } = filaParaIngestao(5);
+    const n = await ingerirWebhook(webhookTexto('wamid.1', '5511999', 'oi'), {
+      eventos: eventStoreVazio(),
+      fila,
+      agora: () => '2026-09-01T12:00:00.000Z',
+      delaySegundos: 0,
+    });
+    expect(n).toBe(1);
+    expect(enfileiradas).toHaveLength(1);
+  });
+
+  it('descarta a mensagem quando o telefone já bateu o limite na janela (default: 30/60min)', async () => {
+    const { fila, enfileiradas } = filaParaIngestao(30);
+    const eventos = eventStoreVazio();
+    const n = await ingerirWebhook(webhookTexto('wamid.2', '5511999', 'spam'), {
+      eventos,
+      fila,
+      agora: () => '2026-09-01T12:00:00.000Z',
+      delaySegundos: 0,
+    });
+    expect(n).toBe(0);
+    expect(enfileiradas).toHaveLength(0);
+    // Idempotência continua registrada: a Meta não deve reentregar em loop.
+    expect(await eventos.jaVisto('wamid.2')).toBe(true);
+  });
+
+  it('respeita um limite configurável (env RATE_LIMIT_MAX_MENSAGENS)', async () => {
+    const { fila: filaNoLimite, enfileiradas: a } = filaParaIngestao(3);
+    await ingerirWebhook(webhookTexto('wamid.3', '5511999', 'oi'), {
+      eventos: eventStoreVazio(),
+      fila: filaNoLimite,
+      agora: () => '2026-09-01T12:00:00.000Z',
+      delaySegundos: 0,
+      limiteMensagens: 3,
+    });
+    expect(a).toHaveLength(0); // 3 recentes >= limite 3: descarta
+
+    const { fila: filaAbaixo, enfileiradas: b } = filaParaIngestao(2);
+    await ingerirWebhook(webhookTexto('wamid.4', '5511999', 'oi'), {
+      eventos: eventStoreVazio(),
+      fila: filaAbaixo,
+      agora: () => '2026-09-01T12:00:00.000Z',
+      delaySegundos: 0,
+      limiteMensagens: 3,
+    });
+    expect(b).toHaveLength(1); // 2 recentes < limite 3: enfileira
   });
 });

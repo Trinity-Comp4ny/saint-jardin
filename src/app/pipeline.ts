@@ -23,6 +23,13 @@ export interface IngestDeps {
   jitterSegundos?: number;
   /** Fonte de aleatoriedade [0,1) (injetável para testes). */
   rng?: () => number;
+  /**
+   * Rate limit por telefone (ADR-0009): protege contra custo de LLM disparado
+   * por abuso (spam de mensagens/áudio pelo número real da Raquel). Acima do
+   * limite, a mensagem é descartada sem enfileirar (idempotência já registrada).
+   */
+  limiteMensagens?: number; // default 30
+  janelaLimiteMinutos?: number; // default 60
 }
 
 /**
@@ -35,6 +42,8 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
   const base = deps.delaySegundos ?? 60;
   const jitterMax = deps.jitterSegundos ?? 0;
   const rng = deps.rng ?? Math.random;
+  const limite = deps.limiteMensagens ?? 30;
+  const janelaSegundos = (deps.janelaLimiteMinutos ?? 60) * 60;
   let enfileiradas = 0;
 
   for (const msg of mensagens) {
@@ -44,6 +53,10 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
 
     const conteudo = msg.tipo === 'audio' ? (msg.mediaId ?? '') : (msg.texto ?? '');
     if (!conteudo) continue;
+
+    const desdeISO = adiarISO(deps.agora(), -janelaSegundos);
+    const recentes = await deps.fila.contarRecentes(msg.de, desdeISO);
+    if (recentes >= limite) continue; // acima do limite na janela: descarta
 
     const jitter = jitterMax > 0 ? Math.floor(rng() * (jitterMax + 1)) : 0;
     await deps.fila.enfileirar({
