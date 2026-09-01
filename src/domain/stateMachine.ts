@@ -300,6 +300,54 @@ function fluxoVisitaTecnica(
   };
 }
 
+/**
+ * Decide com base no que falta para orçar: dia (fim de semana/dia de semana) e nº
+ * de convidados. Com tudo completo, segue para o mini wedding ou para
+ * `avancarComData` (que cuida do ano/data). Compartilhada entre o estado
+ * 'aguardando_qualificacao' e o primeiro contato, quando ele já veio com dados.
+ */
+function qualificar(
+  base: Conversa,
+  slots: Slots,
+  nlu: EntradaNLU,
+  ctx: ContextoDecisao,
+): ResultadoDecisao {
+  const faltando: string[] = [];
+  if (!classificarDia(slots)) {
+    faltando.push('se o evento é num sábado/domingo ou dia de semana');
+  }
+  if (slots.convidados === undefined) {
+    faltando.push('o número estimado de convidados');
+  }
+  if (faltando.length > 0) {
+    // Se a noiva quer visitar e ainda não deu dados de orçamento, conduz para
+    // a preferência de visita em vez de insistir na qualificação.
+    if (nlu.intencao === 'agendar_visita') {
+      return {
+        conversa: { ...base, estado: 'aguardando_pref_visita' },
+        saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
+      };
+    }
+    return {
+      conversa: base,
+      saidas: [pergunta(MSG.pedirDadosFaltantes(faltando, ctx.seed))],
+    };
+  }
+
+  // Mini wedding é SÓ dia de semana até 80 convidados: aí oferecemos o mini.
+  if (ehMiniWedding(slots)) {
+    return {
+      conversa: { ...base, estado: 'aguardando_interesse_mini' },
+      saidas: [texto(MSG.ofertaMini)],
+    };
+  }
+
+  // Todo o resto (fim de semana, ou dia de semana com mais de 80) vai direto
+  // para a proposta normal, sem etapa de confirmação: o PDF já traz o valor de
+  // fim de semana e de evento grande de dia de semana. Regra confirmada pela Raquel.
+  return avancarComData(base, slots, ctx);
+}
+
 export function decidir(
   conversa: Conversa,
   nlu: EntradaNLU,
@@ -391,51 +439,25 @@ export function decidir(
         };
       }
 
-      // Abertura padrão: depois do PDF, a pergunta qualificadora LITERAL (texto
-      // oficial da Raquel, não humanizado). Os dados que ela já tenha adiantado
-      // ficam guardados nos slots e são usados quando ela responder.
-      return {
-        conversa: { ...base, estado: 'aguardando_qualificacao' },
-        saidas: [...apresentacao, texto(MSG.perguntaQualificadora)],
-      };
-    }
-
-    case 'aguardando_qualificacao': {
-      const faltando: string[] = [];
-      if (!classificarDia(slots)) {
-        faltando.push('se o evento é num sábado/domingo ou dia de semana');
-      }
-      if (slots.convidados === undefined) {
-        faltando.push('o número estimado de convidados');
-      }
-      if (faltando.length > 0) {
-        // Se a noiva quer visitar e ainda não deu dados de orçamento, conduz para
-        // a preferência de visita em vez de insistir na qualificação.
-        if (nlu.intencao === 'agendar_visita') {
-          return {
-            conversa: { ...base, estado: 'aguardando_pref_visita' },
-            saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
-          };
-        }
+      // Nada foi adiantado ainda: abertura padrão, pergunta qualificadora LITERAL
+      // (texto oficial da Raquel, não humanizado) pedindo tudo de uma vez.
+      if (!jaVeioAlgumDado) {
         return {
-          conversa: base,
-          saidas: [pergunta(MSG.pedirDadosFaltantes(faltando, ctx.seed))],
+          conversa: { ...base, estado: 'aguardando_qualificacao' },
+          saidas: [...apresentacao, texto(MSG.perguntaQualificadora)],
         };
       }
 
-      // Mini wedding é SÓ dia de semana até 80 convidados: aí oferecemos o mini.
-      if (ehMiniWedding(slots)) {
-        return {
-          conversa: { ...base, estado: 'aguardando_interesse_mini' },
-          saidas: [texto(MSG.ofertaMini)],
-        };
-      }
-
-      // Todo o resto (fim de semana, ou dia de semana com mais de 80) vai direto
-      // para a proposta normal, sem etapa de confirmação: o PDF já traz o valor de
-      // fim de semana e de evento grande de dia de semana. Regra confirmada pela Raquel.
-      return avancarComData(base, slots, ctx);
+      // Ela já adiantou algo no próprio primeiro contato (comum em áudio, onde a
+      // pessoa fala tudo de uma vez): não repete o que ela já disse. Reaproveita a
+      // mesma lógica de 'aguardando_qualificacao' — pergunta só o que falta, ou já
+      // avança para a oferta/proposta se veio tudo.
+      const seguinte = qualificar({ ...base, estado: 'aguardando_qualificacao' }, slots, nlu, ctx);
+      return { conversa: seguinte.conversa, saidas: [...apresentacao, ...seguinte.saidas] };
     }
+
+    case 'aguardando_qualificacao':
+      return qualificar(base, slots, nlu, ctx);
 
     case 'aguardando_interesse_mini':
       if (nlu.afirmativo) {

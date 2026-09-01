@@ -60,20 +60,35 @@ describe('fluxo feliz - evento normal', () => {
     expect(r.saidas[2]?.texto).toMatch(/Para orçamento/);
   });
 
-  it('1º contato NÃO manda proposta, mesmo com dados completos (guarda e cota depois)', () => {
+  it('1º contato com dados completos (ex.: áudio que já deu tudo) avança direto à proposta', () => {
     const r = decidir(
       conversaEm('novo'),
       nlu({ nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
-    // Abertura padrão (saudação + PDF + qualificadora); os dados ficam guardados.
+    // Apresentação sempre vai primeiro, mas não repete a qualificadora: os dados
+    // já vieram, então pula direto pra proposta no mesmo turno.
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas[0]?.texto).toMatch(/Oii Marina/);
+    expect(r.saidas[1]?.pdf).toBe('apresentacao');
+    expect(r.saidas.some((s) => s.texto?.includes('Para orçamento, você poderia'))).toBe(false);
+    expect(r.saidas.find((s) => s.tipo === 'pdf' && s.pdf !== 'apresentacao')?.pdf).toBe('proposta_2027');
+  });
+
+  it('1º contato com dado parcial (só o dia) pergunta só o que falta, sem repetir a qualificadora inteira', () => {
+    const r = decidir(conversaEm('novo'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    expect(r.conversa.slots.convidados).toBe(150);
-    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf !== 'apresentacao')).toBe(false);
-    // No turno seguinte, com os dados já em mãos, a proposta sai.
-    const r2 = decidir(r.conversa, nlu({ afirmativo: true }), ctx);
-    expect(r2.conversa.estado).toBe('proposta_enviada');
-    expect(r2.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
+    expect(r.conversa.slots.diaSemana).toBe('sabado');
+    // Apresentação + só a pergunta do que falta (convidados), não a qualificadora literal.
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas[2]?.texto).toMatch(/convidados/);
+    expect(r.saidas[2]?.texto).not.toMatch(/Para orçamento, você poderia/);
+  });
+
+  it('1º contato sem nenhum dado mantém a qualificadora literal completa', () => {
+    const r = decidir(conversaEm('novo'), nlu(), ctx);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.saidas[2]?.texto).toMatch(/Para orçamento, você poderia me informar a data e o ano/);
   });
 
   it('pede dados que faltam quando só veio o dia', () => {
@@ -273,17 +288,25 @@ describe('visita de noiva (coleta e repassa)', () => {
     expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
   });
 
-  it('orçamento + visita na 1ª mensagem: abre com qualificadora e cota no turno seguinte (não handoff)', () => {
+  it('orçamento + visita na 1ª mensagem, com dados completos: cota já no 1º turno (não handoff)', () => {
     const r = decidir(
       conversaEm('novo'),
       nlu({ intencao: 'agendar_visita', nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
-    // 1º turno é a abertura padrão; os dados ficam guardados.
-    expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    const r2 = decidir(r.conversa, nlu({ afirmativo: true }), ctx);
-    expect(r2.conversa.estado).toBe('proposta_enviada');
-    expect(r2.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2027')).toBe(true);
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2027')).toBe(true);
+  });
+
+  it('orçamento parcial + visita na 1ª mensagem: já vai pra preferência de visita, guardando o dia', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'agendar_visita', slots: { diaSemana: 'sabado' } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.conversa.slots.diaSemana).toBe('sabado');
+    expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
   });
 
   it('aceite da visita pergunta a preferência de dia', () => {
