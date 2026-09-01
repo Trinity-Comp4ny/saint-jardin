@@ -126,33 +126,50 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
   let turnos = 0;
   for (const [telefone, grupo] of grupos) {
     try {
-      const partes: string[] = [];
-      let falhaAudio = false;
-      for (const item of grupo) {
-        if (item.tipo === 'audio') {
-          try {
-            const texto = await deps.transcriber.transcrever(item.conteudo);
-            if (texto) partes.push(texto);
-          } catch {
-            falhaAudio = true;
-          }
-        } else if (item.conteudo) {
-          partes.push(item.conteudo);
-        }
+      // Conversa já com a Raquel: nem transcreve. Sem essa checagem, um número
+      // que já caiu em handoff (ex.: pergunta fora do script) podia continuar
+      // mandando áudio e cada um custava uma chamada de transcrição de graça —
+      // o orquestrador só ignoraria a mensagem DEPOIS dela já ter sido paga.
+      // Best-effort: se a checagem falhar (rede), assume que NÃO está em handoff
+      // (falha aberto aqui, não fechado — não vale perder resposta de cliente
+      // real por causa de uma falha transitória nesta checagem extra).
+      let jaComARaquel = false;
+      try {
+        const conversaAtual = await deps.orquestrador.conversas.obter(telefone);
+        jaComARaquel = conversaAtual?.estado === 'handoff' || conversaAtual?.estado === 'humano';
+      } catch {
+        jaComARaquel = false;
       }
 
-      if (falhaAudio) {
-        // Não segue para o NLU com contexto incompleto: a conversa já vai para
-        // handoff, e o orquestrador ignoraria a mensagem mesmo (estado 'handoff').
-        await avisarFalhaTranscricao(deps.orquestrador, telefone);
-      } else {
-        const mensagem = partes.join('\n');
-        if (mensagem) {
-          // Passa o id da última mensagem da rajada: o orquestrador cuida do
-          // read/unread e do "digitando" (marca lido só quando o bot resolve, não
-          // em handoff, para a conversa que precisa da Raquel ficar não lida).
-          const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
-          await processarMensagem(telefone, mensagem, deps.orquestrador, ultimoId);
+      if (!jaComARaquel) {
+        const partes: string[] = [];
+        let falhaAudio = false;
+        for (const item of grupo) {
+          if (item.tipo === 'audio') {
+            try {
+              const texto = await deps.transcriber.transcrever(item.conteudo);
+              if (texto) partes.push(texto);
+            } catch {
+              falhaAudio = true;
+            }
+          } else if (item.conteudo) {
+            partes.push(item.conteudo);
+          }
+        }
+
+        if (falhaAudio) {
+          // Não segue para o NLU com contexto incompleto: a conversa já vai para
+          // handoff, e o orquestrador ignoraria a mensagem mesmo (estado 'handoff').
+          await avisarFalhaTranscricao(deps.orquestrador, telefone);
+        } else {
+          const mensagem = partes.join('\n');
+          if (mensagem) {
+            // Passa o id da última mensagem da rajada: o orquestrador cuida do
+            // read/unread e do "digitando" (marca lido só quando o bot resolve, não
+            // em handoff, para a conversa que precisa da Raquel ficar não lida).
+            const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
+            await processarMensagem(telefone, mensagem, deps.orquestrador, ultimoId);
+          }
         }
       }
     } finally {

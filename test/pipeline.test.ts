@@ -214,6 +214,74 @@ describe('processarFila — falha ao transcrever áudio', () => {
   });
 });
 
+describe('processarFila — economiza custo quando a conversa já está com a Raquel', () => {
+  function itemAudio(id: string, telefone: string, mediaId: string): ItemFila {
+    return { id, telefone, tipo: 'audio', conteudo: mediaId, processarApos: '2026-07-30T11:59:00.000Z' };
+  }
+
+  function transcriberEspiao(): { transcriber: Transcriber; chamadas: string[] } {
+    const chamadas: string[] = [];
+    return {
+      chamadas,
+      transcriber: {
+        async transcrever(mediaId) {
+          chamadas.push(mediaId);
+          return 'texto transcrito';
+        },
+      },
+    };
+  }
+
+  function conversaEm(telefone: string, estado: Conversa['estado']): Conversa {
+    return {
+      telefone,
+      estado,
+      slots: {},
+      criadoEm: '2026-07-30T12:00:00.000Z',
+      atualizadoEm: '2026-07-30T12:00:00.000Z',
+    };
+  }
+
+  it('não transcreve áudio quando a conversa já está em handoff (regressão: rajada de áudio pós-handoff)', async () => {
+    const { fila, processados } = filaCom([itemAudio('1', '5511999', 'media-abc')]);
+    const { nlu, textos } = nluEspiao();
+    const { transcriber, chamadas } = transcriberEspiao();
+    const conversas = new InMemoryConversaRepo();
+    await conversas.salvar(conversaEm('5511999', 'handoff'));
+    const deps: Deps = { ...orquestrador(nlu), conversas };
+
+    await processarFila({ fila, transcriber, orquestrador: deps });
+
+    expect(chamadas).toHaveLength(0); // nem tentou transcrever
+    expect(textos).toHaveLength(0); // NLU também não foi chamado
+    expect(processados).toEqual(['1']); // item ainda é marcado como processado
+  });
+
+  it('não transcreve quando a conversa já está com humano (estado "humano")', async () => {
+    const { fila } = filaCom([itemAudio('1', '5511999', 'media-abc')]);
+    const { nlu } = nluEspiao();
+    const { transcriber, chamadas } = transcriberEspiao();
+    const conversas = new InMemoryConversaRepo();
+    await conversas.salvar(conversaEm('5511999', 'humano'));
+    const deps: Deps = { ...orquestrador(nlu), conversas };
+
+    await processarFila({ fila, transcriber, orquestrador: deps });
+
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it('continua transcrevendo normalmente quando a conversa não está em handoff', async () => {
+    const { fila } = filaCom([itemAudio('1', '5511999', 'media-abc')]);
+    const { nlu, textos } = nluEspiao();
+    const { transcriber, chamadas } = transcriberEspiao();
+
+    await processarFila({ fila, transcriber, orquestrador: orquestrador(nlu) });
+
+    expect(chamadas).toEqual(['media-abc']);
+    expect(textos).toHaveLength(1);
+  });
+});
+
 function eventStoreVazio(): EventStore {
   const vistos = new Set<string>();
   return {
