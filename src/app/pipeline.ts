@@ -68,8 +68,12 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
 
   for (const msg of mensagens) {
     if (msg.tipo === 'outro') continue;
-    if (await deps.eventos.jaVisto(msg.messageId)) continue;
-    await deps.eventos.marcar(msg.messageId);
+    // Dedup ATÔMICO: `marcar` é o próprio check-and-set (via constraint de
+    // unicidade no banco), não duas chamadas separadas com janela de corrida
+    // entre elas. Sob reentrega concorrente real da Meta pro mesmo messageId,
+    // só uma das chamadas recebe `true`.
+    const primeiraVez = await deps.eventos.marcar(msg.messageId);
+    if (!primeiraVez) continue;
 
     const conteudo =
       msg.tipo === 'audio'

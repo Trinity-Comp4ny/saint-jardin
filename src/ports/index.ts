@@ -131,10 +131,19 @@ export interface Transcriber {
   transcrever(mediaId: string): Promise<string>;
 }
 
-/** Idempotência: a Meta reentrega webhooks; evita processar a mesma msg 2x. */
+/**
+ * Idempotência: a Meta reentrega webhooks (às vezes quase simultaneamente,
+ * reentrega real de rede) — evita processar a mesma msg 2x.
+ */
 export interface EventStore {
-  jaVisto(messageId: string): Promise<boolean>;
-  marcar(messageId: string): Promise<void>;
+  /**
+   * Registra `messageId` como visto de forma ATÔMICA (via constraint de
+   * unicidade no banco, não um check-then-act em duas chamadas separadas).
+   * Retorna `true` na primeira vez (o chamador deve processar); `false` se já
+   * estava registrado (outra chamada concorrente já reivindicou essa
+   * mensagem — o chamador NÃO deve processar de novo).
+   */
+  marcar(messageId: string): Promise<boolean>;
 }
 
 export type TipoItemFila = 'texto' | 'audio';

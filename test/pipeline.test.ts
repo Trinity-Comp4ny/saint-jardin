@@ -282,14 +282,18 @@ describe('processarFila — economiza custo quando a conversa já está com a Ra
   });
 });
 
+// Simula a atomicidade real do banco (constraint de unicidade em
+// `eventos_processados`): `marcar` é o próprio check-and-set, sem `await`
+// entre checar e gravar — nenhuma janela de corrida é possível aqui, do
+// mesmo jeito que o INSERT do Postgres não deixa duas linhas com o mesmo
+// message_id existirem, não importa a ordem de chegada.
 function eventStoreVazio(): EventStore {
   const vistos = new Set<string>();
   return {
-    async jaVisto(id) {
-      return vistos.has(id);
-    },
     async marcar(id) {
+      if (vistos.has(id)) return false;
       vistos.add(id);
+      return true;
     },
   };
 }
@@ -349,7 +353,7 @@ describe('ingerirWebhook — rate limit por telefone (ADR-0009)', () => {
     expect(n).toBe(0);
     expect(enfileiradas).toHaveLength(0);
     // Idempotência continua registrada: a Meta não deve reentregar em loop.
-    expect(await eventos.jaVisto('wamid.2')).toBe(true);
+    expect(await eventos.marcar('wamid.2')).toBe(false);
   });
 
   it('respeita um limite configurável (env RATE_LIMIT_MAX_MENSAGENS)', async () => {
@@ -410,5 +414,24 @@ describe('processarFila — erro inesperado num telefone não pode derrubar o re
     ).toBe(true);
     // telefone seguinte no mesmo lote: processado normalmente, não foi arrastado
     expect(messaging.enviadas.some((e) => e.telefone === '5522222')).toBe(true);
+  });
+});
+
+describe('ingerirWebhook — dedup atômico sob concorrência real (regressão)', () => {
+  it('duas chamadas CONCORRENTES (Promise.all, não sequencial) pro mesmo messageId enfileiram só uma vez', async () => {
+    // Antes: `jaVisto` e `marcar` eram duas chamadas separadas (check-then-act).
+    // Sob reentrega da Meta quase simultânea de verdade — não `await` sequencial,
+    // que sempre resolveria a corrida por ordem de chamada — as duas podiam
+    // passar pelo `jaVisto` antes de qualquer uma marcar, e a mensagem entrava
+    // na fila 2x. Agora `marcar` é o próprio check-and-set atômico.
+    const { fila, enfileiradas } = filaParaIngestao(0);
+    const eventos = eventStoreVazio();
+    const body = webhookTexto('wamid.concorrente', '5511999', 'oi');
+    const deps = { eventos, fila, agora: () => '2026-09-01T12:00:00.000Z', delaySegundos: 0 };
+
+    const [n1, n2] = await Promise.all([ingerirWebhook(body, deps), ingerirWebhook(body, deps)]);
+
+    expect(n1 + n2).toBe(1); // só uma das duas chamadas concorrentes enfileirou
+    expect(enfileiradas).toHaveLength(1);
   });
 });

@@ -125,17 +125,16 @@ export class SupabaseMensagemRepo implements MensagemRepo {
 export class SupabaseEventStore implements EventStore {
   constructor(private readonly db: SupabaseClient) {}
 
-  async jaVisto(messageId: string): Promise<boolean> {
-    const { data } = await this.db
-      .from('eventos_processados')
-      .select('message_id')
-      .eq('message_id', messageId)
-      .maybeSingle();
-    return data !== null;
-  }
-
-  async marcar(messageId: string): Promise<void> {
-    await this.db.from('eventos_processados').insert({ message_id: messageId });
+  async marcar(messageId: string): Promise<boolean> {
+    const { error } = await this.db.from('eventos_processados').insert({ message_id: messageId });
+    if (!error) return true; // inserção nova: primeira vez que vemos essa mensagem
+    // 23505 = unique_violation no Postgres: outra chamada (reentrega concorrente
+    // da Meta) já inseriu esse message_id primeiro. Isso É a proteção, não um
+    // erro — antes esse `error` era ignorado e a mensagem seguia pro processamento
+    // mesmo já tendo sido reivindicada, sob concorrência real (duas chamadas de
+    // fato simultâneas, não sequenciais) enfileirava a mesma mensagem 2x.
+    if (error.code === '23505') return false;
+    throw new Error(`marcar evento: ${error.message}`);
   }
 }
 
