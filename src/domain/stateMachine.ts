@@ -320,9 +320,12 @@ function qualificar(
     faltando.push('o número estimado de convidados');
   }
   if (faltando.length > 0) {
-    // Se a noiva quer visitar e ainda não deu dados de orçamento, conduz para
-    // a preferência de visita em vez de insistir na qualificação.
-    if (nlu.intencao === 'agendar_visita') {
+    // Se a noiva quer visitar e ainda não deu NENHUM dado de orçamento, conduz
+    // para a preferência de visita em vez de insistir na qualificação. Se ela já
+    // deu algo (ex.: convidados, mas não o dia), continua pedindo o que falta:
+    // "quero visitar" não substitui o orçamento, os dois seguem em paralelo.
+    const nenhumDadoAinda = !classificarDia(slots) && slots.convidados === undefined;
+    if (nlu.intencao === 'agendar_visita' && nenhumDadoAinda) {
       return {
         conversa: { ...base, estado: 'aguardando_pref_visita' },
         saidas: [pergunta(MSG.perguntaPreferenciaVisita)],

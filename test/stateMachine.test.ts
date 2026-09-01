@@ -298,15 +298,43 @@ describe('visita de noiva (coleta e repassa)', () => {
     expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'proposta_2027')).toBe(true);
   });
 
-  it('orçamento parcial + visita na 1ª mensagem: já vai pra preferência de visita, guardando o dia', () => {
+  it('orçamento parcial + visita na 1ª mensagem: continua pedindo o que falta (não pula pra visita)', () => {
+    // Regressão: pediu visita, mas só deu o dia (faltou convidados) — "quero
+    // visitar" não deve fazer o bot pular o que ainda falta pro orçamento.
     const r = decidir(
       conversaEm('novo'),
       nlu({ intencao: 'agendar_visita', slots: { diaSemana: 'sabado' } }),
       ctx,
     );
-    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.conversa.slots.diaSemana).toBe('sabado');
-    expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
+    expect(r.saidas.at(-1)?.texto).toMatch(/convidados/);
+  });
+
+  it('orçamento parcial (ano+convidados, sem dia) + visita: pergunta o dia, não pula pra visita', () => {
+    // Reprodução exata do relato: "queria conhecer o espaço... ano que vem...
+    // 400 convidados" — deu ano e convidados, mas nunca disse sábado/domingo/dia
+    // de semana. O bot não pode avançar sem essa resposta.
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'agendar_visita', slots: { ano: 2027, convidados: 400 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.conversa.slots.convidados).toBe(400);
+    expect(r.saidas.at(-1)?.texto).toMatch(/sábado.*domingo.*dia de semana/i);
+  });
+
+  it('quer visitar e não deu NENHUM dado no turno seguinte: aí sim pula pra preferência de visita', () => {
+    // Turno 1 sem dado nenhum já deixou a conversa em 'aguardando_qualificacao'
+    // (abertura padrão). Turno 2: ela só diz que quer visitar, sem dado novo.
+    const r = decidir(
+      conversaEm('aguardando_qualificacao'),
+      nlu({ intencao: 'agendar_visita' }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
   });
 
   it('aceite da visita pergunta a preferência de dia', () => {
