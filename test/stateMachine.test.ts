@@ -190,6 +190,29 @@ describe('fluxo mini wedding', () => {
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
     expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_mini');
   });
+
+  it('regressão: responder com uma data (sem "sim" explícito) também envia o PDF do mini', () => {
+    // NLU não marca afirmativo/negativo quando a mensagem traz um dado novo
+    // (é a regra do próprio prompt) — dar uma data aqui só faz sentido como
+    // aceite, então não pode cair no fallback que nunca manda o PDF.
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini', { preferenciaDia: 'dia_de_semana', convidados: 50 }),
+      nlu({ slots: { data: '2027-03-15' } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_mini');
+  });
+
+  it('recusa explícita continua encerrando, mesmo com dado de orçamento junto (negativo tem prioridade)', () => {
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini', { preferenciaDia: 'dia_de_semana', convidados: 50 }),
+      nlu({ negativo: true }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('encerrada');
+    expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
+  });
 });
 
 describe('dia de semana acima do limite do mini', () => {

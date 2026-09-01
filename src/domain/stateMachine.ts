@@ -463,7 +463,12 @@ export function decidir(
       return qualificar(base, slots, nlu, ctx);
 
     case 'aguardando_interesse_mini':
-      if (nlu.afirmativo) {
+      // Regressão: ela responde com uma DATA em vez de "sim" ("15 de março de
+      // 2027") — o NLU corretamente não marca afirmativo/negativo quando a
+      // mensagem traz um dado novo, mas dar uma data pra um convite de mini
+      // wedding SÓ faz sentido como aceite. Sem isso, caía no fallback "sem
+      // sim/não claro" e a proposta nunca era enviada.
+      if (nlu.afirmativo || trouxeDadoDeOrcamento(nlu)) {
         return {
           conversa: { ...base, estado: 'proposta_enviada' },
           saidas: [
