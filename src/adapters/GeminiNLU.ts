@@ -93,7 +93,14 @@ const numeroOpcional = z
 const schema = z.object({
   slots: z
     .object({
-      data: z.string().optional(),
+      // Só data ISO de verdade: o modelo às vezes devolve texto ("26 de
+      // janeiro") ou data com hora — normaliza pra YYYY-MM-DD ou descarta.
+      data: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}/)
+        .transform((s) => s.slice(0, 10))
+        .optional()
+        .catch(undefined),
       mesDia: z
         .string()
         .regex(/^\d{2}-\d{2}$/)

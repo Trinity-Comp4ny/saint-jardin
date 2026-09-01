@@ -54,6 +54,13 @@ export interface Slots {
   convidados?: number;
   /** Nome da noiva, quando ela se apresenta. Usado pelo Redator para personalizar. */
   nome?: string;
+  /**
+   * Controle interno (NUNCA vem da NLU): última data que o bot já avisou estar
+   * ocupada. Permite tratar o "pode ser" do turno seguinte como aceite da
+   * alternativa oferecida — sem o aviso prévio, um afirmativo solto não adota
+   * data nenhuma.
+   */
+  dataOcupadaAvisada?: string;
 }
 
 export type EstadoConversa =

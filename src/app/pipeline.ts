@@ -59,11 +59,14 @@ export interface IngestDeps {
  */
 export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<number> {
   const mensagens = parseWebhook(body);
-  const base = deps.delaySegundos ?? 60;
-  const jitterMax = deps.jitterSegundos ?? 0;
+  // Clamps de configuração: delay/jitter nunca negativos; limite e janela nunca
+  // zerados/negativos (um limite ≤ 0 por env torta bloquearia TODO mundo em
+  // silêncio — a mesma classe de falha que `numeroEnv` já protege).
+  const base = Math.max(0, deps.delaySegundos ?? 60);
+  const jitterMax = Math.max(0, deps.jitterSegundos ?? 0);
   const rng = deps.rng ?? Math.random;
-  const limite = deps.limiteMensagens ?? 30;
-  const janelaSegundos = (deps.janelaLimiteMinutos ?? 60) * 60;
+  const limite = Math.max(1, deps.limiteMensagens ?? 30);
+  const janelaSegundos = Math.max(60, (deps.janelaLimiteMinutos ?? 60) * 60);
   let enfileiradas = 0;
 
   for (const msg of mensagens) {
@@ -74,31 +77,45 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
     const primeiraVez = await deps.eventos.marcar(msg.messageId);
     if (!primeiraVez) continue;
 
-    // 'outro' = figurinha, reação, imagem, documento, localização etc. Sem
-    // conteúdo de texto real pra extrair, mas ainda entra na fila: sem isso a
-    // noiva que reage com 👍 (achando que respondeu) fica sem retorno nenhum,
-    // achando que travou (`processarFila` avisa que só entende texto/áudio).
-    const conteudo =
-      msg.tipo === 'audio'
-        ? (msg.mediaId ?? '')
-        : msg.tipo === 'outro'
-          ? 'outro'
-          : (msg.texto ?? '').slice(0, MAX_CARACTERES_MENSAGEM);
-    if (!conteudo) continue;
+    try {
+      // 'outro' = figurinha, reação, imagem, documento, localização etc. Sem
+      // conteúdo de texto real pra extrair, mas ainda entra na fila: sem isso a
+      // noiva que reage com 👍 (achando que respondeu) fica sem retorno nenhum,
+      // achando que travou (`processarFila` avisa que só entende texto/áudio).
+      const conteudo =
+        msg.tipo === 'audio'
+          ? (msg.mediaId ?? '')
+          : msg.tipo === 'outro'
+            ? 'outro'
+            : (msg.texto ?? '').slice(0, MAX_CARACTERES_MENSAGEM);
+      if (!conteudo) continue;
 
-    const desdeISO = adiarISO(deps.agora(), -janelaSegundos);
-    const recentes = await deps.fila.contarRecentes(msg.de, desdeISO);
-    if (recentes >= limite) continue; // acima do limite na janela: descarta
+      const desdeISO = adiarISO(deps.agora(), -janelaSegundos);
+      const recentes = await deps.fila.contarRecentes(msg.de, desdeISO);
+      if (recentes >= limite) continue; // acima do limite na janela: descarta
 
-    const jitter = jitterMax > 0 ? Math.floor(rng() * (jitterMax + 1)) : 0;
-    await deps.fila.enfileirar({
-      telefone: msg.de,
-      tipo: msg.tipo,
-      conteudo,
-      processarApos: adiarISO(deps.agora(), base + jitter),
-      mensagemId: msg.messageId,
-    });
-    enfileiradas++;
+      const jitter = jitterMax > 0 ? Math.floor(rng() * (jitterMax + 1)) : 0;
+      await deps.fila.enfileirar({
+        telefone: msg.de,
+        tipo: msg.tipo,
+        conteudo,
+        processarApos: adiarISO(deps.agora(), base + jitter),
+        mensagemId: msg.messageId,
+      });
+      enfileiradas++;
+    } catch (erro) {
+      // Falhou DEPOIS do dedup (fila/rate-limit fora do ar): solta a marca pra
+      // reentrega da Meta poder processar esta mensagem. Sem isso ela morria
+      // marcada como vista e nunca era respondida. As mensagens JÁ enfileiradas
+      // deste mesmo webhook continuam marcadas (a reentrega pula elas) — e o
+      // rethrow vira 500 no webhook, que é o que faz a Meta reentregar.
+      try {
+        await deps.eventos.desmarcar(msg.messageId);
+      } catch {
+        // Melhor esforço: se nem a compensação foi, não há mais o que fazer aqui.
+      }
+      throw erro;
+    }
   }
 
   return enfileiradas;

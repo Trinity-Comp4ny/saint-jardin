@@ -57,6 +57,15 @@ export function novaConversa(telefone: string, agora: string): Conversa {
 
 /** Classifica o dia em fim de semana (valor cheio) ou dia de semana (mini). */
 export function classificarDia(slots: Slots): PreferenciaDia | undefined {
+  // A data concreta manda: se sabemos o dia do calendário, o dia da semana sai
+  // dela. Sem isso, quem dizia "dia de semana" e depois dava uma data de sábado
+  // recebia proposta de mini wedding para um sábado (e vice-versa).
+  const dataISO = dataCompleta(slots);
+  if (dataISO) {
+    const [y, m, d] = dataISO.split('-').map(Number);
+    const dow = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1).getDay(); // 0=dom ... 6=sáb
+    return dow >= 1 && dow <= 4 ? 'dia_de_semana' : 'fim_de_semana';
+  }
   if (slots.diaSemana) {
     return DIAS_DE_SEMANA.includes(slots.diaSemana) ? 'dia_de_semana' : 'fim_de_semana';
   }
@@ -75,25 +84,79 @@ export function ehMiniWedding(slots: Slots): boolean {
   return dia === 'dia_de_semana' && cabeNoMini;
 }
 
+/** Ano vendável (2027/2028) a partir de um número qualquer. */
+function anoVendavel(y: number | undefined): Ano | undefined {
+  return y === 2027 || y === 2028 ? y : undefined;
+}
+
 export function mesclarSlots(atual: Slots, novo: Slots): Slots {
-  const mes = novo.mes ?? atual.mes;
-  const dia = novo.dia ?? atual.dia;
-  let mesDia = novo.mesDia ?? atual.mesDia;
-  // Mês e dia vieram em mensagens diferentes ("outubro" e depois "30"): combina
-  // no MM-DD canônico, para o resto do fluxo continuar usando só `mesDia`.
-  if (!mesDia && mes && dia) {
-    mesDia = `${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+  const trouxeParteDeData =
+    novo.data !== undefined ||
+    novo.mesDia !== undefined ||
+    novo.mes !== undefined ||
+    novo.dia !== undefined ||
+    novo.ano !== undefined;
+
+  let data = atual.data;
+  let mesDia = atual.mesDia;
+  let mes = atual.mes;
+  let dia = atual.dia;
+  let ano = atual.ano;
+
+  if (trouxeParteDeData) {
+    // Decompõe o que já se sabia em (dia, mês, ano), para uma correção parcial
+    // ("na verdade dia 15", "e para 2028?") substituir SÓ aquela parte. Antes, a
+    // data completa antiga continuava mandando no fluxo (dataCompleta preferia
+    // `data`), e o bot checava disponibilidade da data velha depois da correção.
+    if (mesDia) {
+      const [m, d] = mesDia.split('-').map(Number);
+      mes ??= m;
+      dia ??= d;
+    }
+    if (data) {
+      const [y, m, d] = data.slice(0, 10).split('-').map(Number);
+      ano ??= anoVendavel(y);
+      mes ??= m;
+      dia ??= d;
+    }
+
+    if (novo.data !== undefined) {
+      // Data completa nova substitui tudo que se sabia de data.
+      data = novo.data;
+      ano = novo.ano ?? anoVendavel(Number(novo.data.slice(0, 4)));
+      mesDia = undefined;
+      mes = undefined;
+      dia = undefined;
+    } else {
+      data = undefined; // qualquer parte nova invalida a data completa antiga
+      if (novo.mesDia !== undefined) {
+        const [m, d] = novo.mesDia.split('-').map(Number);
+        mes = m;
+        dia = d;
+      }
+      if (novo.mes !== undefined) mes = novo.mes;
+      if (novo.dia !== undefined) dia = novo.dia;
+      if (novo.ano !== undefined) ano = novo.ano;
+      // Recombina no MM-DD canônico (mês e dia podem ter vindo em turnos diferentes).
+      mesDia =
+        mes && dia
+          ? `${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+          : undefined;
+    }
   }
+
   return {
-    data: novo.data ?? atual.data,
+    data,
     mesDia,
     mes,
     dia,
-    ano: novo.ano ?? atual.ano,
+    ano,
     diaSemana: novo.diaSemana ?? atual.diaSemana,
     preferenciaDia: novo.preferenciaDia ?? atual.preferenciaDia,
     convidados: novo.convidados ?? atual.convidados,
     nome: novo.nome ?? atual.nome,
+    // Controle interno do aviso de data ocupada: só o próprio bot escreve aqui.
+    dataOcupadaAvisada: novo.dataOcupadaAvisada ?? atual.dataOcupadaAvisada,
   };
 }
 
@@ -214,6 +277,19 @@ function motivoDaIntencao(intencao: EntradaNLU['intencao']): string | null {
   }
 }
 
+/** Os slots acumulados já têm ALGUM dado de orçamento (qualquer parte de data, dia ou convidados). */
+function temDadoDeOrcamento(slots: Slots): boolean {
+  return (
+    slots.data !== undefined ||
+    slots.mesDia !== undefined ||
+    slots.dia !== undefined ||
+    slots.mes !== undefined ||
+    slots.ano !== undefined ||
+    classificarDia(slots) !== undefined ||
+    slots.convidados !== undefined
+  );
+}
+
 /** A leitura traz um dado de orçamento novo (data, dia da semana, convidados...). */
 function trouxeDadoDeOrcamento(nlu: EntradaNLU): boolean {
   const s = nlu.slots;
@@ -229,6 +305,100 @@ function trouxeDadoDeOrcamento(nlu: EntradaNLU): boolean {
   );
 }
 
+/** "YYYY-MM-DD" -> "DD/MM/YYYY", para mensagens ao cliente (nunca ISO cru). */
+function dataBR(dataISO: string): string {
+  const [y, m, d] = dataISO.slice(0, 10).split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/** Proposta normal do ano (anúncio + PDF + descrição + convite de visita). */
+function enviarPropostaNormal(base: Conversa, ano: Ano): ResultadoDecisao {
+  return {
+    conversa: { ...base, estado: 'proposta_enviada' },
+    saidas: [
+      texto(MSG.orcamentoNormalAnuncio),
+      { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
+      texto(MSG.orcamentoNormalDescricao),
+      pergunta(MSG.conviteVisita),
+    ],
+  };
+}
+
+type ChecagemDisponibilidade =
+  | { bloqueio: ResultadoDecisao } // a resposta deste turno já está decidida
+  | { slots: Slots }; // liberado (com a alternativa adotada, quando aceita)
+
+/**
+ * Trata a data completa OCUPADA (compartilhado entre proposta normal e mini):
+ * 1º turno avisa e oferece a alternativa do calendário (marcando o aviso nos
+ * slots); no turno seguinte, um "pode ser" adota a alternativa e um "não" limpa
+ * a data e pergunta outra. Sem o aviso prévio, afirmativo/negativo soltos não
+ * mexem em data nenhuma (um "sim" pra oferta de mini não pode adotar data).
+ */
+function checarDisponibilidade(
+  base: Conversa,
+  slots: Slots,
+  nlu: EntradaNLU,
+  ctx: ContextoDecisao,
+): ChecagemDisponibilidade {
+  const dataISO = dataCompleta(slots);
+  const disp = ctx.disponibilidadeData;
+  if (!dataISO || !disp || disp.data !== dataISO || disp.livre) return { slots };
+
+  // Alternativa real: o calendário pode devolver a própria data quando não acha
+  // nada livre à frente — nesse caso não há o que oferecer.
+  const alternativa =
+    disp.alternativa && disp.alternativa !== dataISO ? disp.alternativa : undefined;
+  const jaAvisada = slots.dataOcupadaAvisada === dataISO;
+
+  if (jaAvisada && alternativa && nlu.afirmativo) {
+    // Aceitou a alternativa oferecida: adota como a data do evento.
+    return {
+      slots: {
+        ...slots,
+        data: alternativa,
+        mesDia: undefined,
+        mes: undefined,
+        dia: undefined,
+        ano: anoVendavel(Number(alternativa.slice(0, 4))) ?? anoEfetivo(slots),
+        dataOcupadaAvisada: undefined,
+      },
+    };
+  }
+
+  if (jaAvisada && nlu.negativo) {
+    // Recusou a alternativa: solta a data ocupada e pergunta outra.
+    const slotsSemData: Slots = {
+      ...slots,
+      data: undefined,
+      mesDia: undefined,
+      mes: undefined,
+      dia: undefined,
+      ano: anoEfetivo(slots),
+      dataOcupadaAvisada: undefined,
+    };
+    return {
+      bloqueio: {
+        conversa: { ...base, slots: slotsSemData },
+        saidas: [pergunta(vary(MSG.perguntaData, ctx.seed))],
+      },
+    };
+  }
+
+  return {
+    bloqueio: {
+      conversa: { ...base, slots: { ...slots, dataOcupadaAvisada: dataISO } },
+      saidas: [
+        texto(
+          alternativa
+            ? MSG.dataIndisponivel(dataBR(dataISO), descreverData(alternativa))
+            : MSG.dataIndisponivelSemAlternativa(dataBR(dataISO)),
+        ),
+      ],
+    },
+  };
+}
+
 /**
  * Evento de valor normal com dia e convidados já sabidos: cuida da data.
  * Pergunta a data específica; se vier só dia/mês, pergunta o ano; com o ano
@@ -237,8 +407,16 @@ function trouxeDadoDeOrcamento(nlu: EntradaNLU): boolean {
 function avancarComData(
   base: Conversa,
   slots: Slots,
+  nlu: EntradaNLU,
   ctx: ContextoDecisao,
 ): ResultadoDecisao {
+  // Data específica já no passado (mesmo antes de saber o ano vendável): avisa
+  // e pede uma data futura.
+  const dataISO = dataCompleta(slots);
+  if (dataISO && dataNoPassado(dataISO, ctx.agora)) {
+    return { conversa: base, saidas: [pergunta(vary(MSG.dataNoPassado, ctx.seed))] };
+  }
+
   const ano = anoEfetivo(slots);
   if (!ano) {
     // Só veio o mês (ex.: "outubro"): pergunta o dia daquele mês, em vez de
@@ -251,30 +429,16 @@ function avancarComData(
     return { conversa: base, saidas: [pergunta(vary(opcoes, ctx.seed))] };
   }
 
-  const dataISO = dataCompleta(slots);
-  // Data específica já no passado: avisa e pede uma data futura.
-  if (dataISO && dataNoPassado(dataISO, ctx.agora)) {
-    return { conversa: base, saidas: [pergunta(vary(MSG.dataNoPassado, ctx.seed))] };
-  }
+  // Data completa em jogo e ocupada: avisa/adota/limpa (fluxo completo).
+  const checagem = checarDisponibilidade(base, slots, nlu, ctx);
+  if ('bloqueio' in checagem) return checagem.bloqueio;
+  const slotsFinais = checagem.slots;
 
-  // Data completa em jogo e ocupada: oferece alternativa.
-  const disp = ctx.disponibilidadeData;
-  if (dataISO && disp && disp.data === dataISO && !disp.livre) {
-    return {
-      conversa: base,
-      saidas: [texto(MSG.dataIndisponivel(dataISO, disp.alternativa ?? 'outra data'))],
-    };
-  }
-
-  return {
-    conversa: { ...base, estado: 'proposta_enviada' },
-    saidas: [
-      texto(MSG.orcamentoNormalAnuncio),
-      { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
-      texto(MSG.orcamentoNormalDescricao),
-      pergunta(MSG.conviteVisita),
-    ],
-  };
+  // A alternativa adotada pode cair em outro ano.
+  return enviarPropostaNormal(
+    { ...base, slots: slotsFinais },
+    anoEfetivo(slotsFinais) ?? ano,
+  );
 }
 
 /** Texto curto da preferência de visita da noiva, para anexar ao motivo do handoff. */
@@ -294,21 +458,36 @@ function prefVisitaTexto(nlu: EntradaNLU): string {
  */
 function fluxoVisitaTecnica(
   base: Conversa,
-  slots: Slots,
+  slotsData: Slots,
   nlu: EntradaNLU,
   ctx: ContextoDecisao,
 ): ResultadoDecisao {
-  const dataISO = resolverDataTecnica(slots, ctx.agora);
+  // Slots persistidos DENTRO do fluxo técnico: o cluster de data passa a ser o
+  // da VISITA (o de `slotsData`), não o do casamento — senão a data do casamento
+  // já coletada "vazava" como data da visita técnica no turno seguinte. O resto
+  // (nome, convidados etc.) segue da conversa.
+  const persistir: Conversa = {
+    ...base,
+    slots: {
+      ...base.slots,
+      data: slotsData.data,
+      mesDia: slotsData.mesDia,
+      mes: slotsData.mes,
+      dia: slotsData.dia,
+      ano: slotsData.ano,
+    },
+  };
+  const dataISO = resolverDataTecnica(slotsData, ctx.agora);
   if (!dataISO) {
     return {
-      conversa: { ...base, estado: 'visita_tecnica_data' },
+      conversa: { ...persistir, estado: 'visita_tecnica_data' },
       saidas: [pergunta(MSG.perguntaDataVisitaTecnica)],
     };
   }
   const validacao = validarVisitaTecnica(dataISO, ctx.agora);
   if (!validacao.ok) {
     return {
-      conversa: { ...base, estado: 'visita_tecnica_data' },
+      conversa: { ...persistir, estado: 'visita_tecnica_data' },
       saidas: [texto(MSG.visitaTecnicaForaRegra(validacao.motivo))],
     };
   }
@@ -327,7 +506,7 @@ function fluxoVisitaTecnica(
       : '');
   // Dentro da regra: avisa que vai verificar e repassa para a Raquel confirmar.
   return {
-    conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
+    conversa: { ...persistir, estado: 'handoff', motivoHandoff: motivo },
     saidas: [pergunta(MSG.visitaTecnicaVouVerificar)],
   };
 }
@@ -356,8 +535,7 @@ function qualificar(
     // para a preferência de visita em vez de insistir na qualificação. Se ela já
     // deu algo (ex.: convidados, mas não o dia), continua pedindo o que falta:
     // "quero visitar" não substitui o orçamento, os dois seguem em paralelo.
-    const nenhumDadoAinda = !classificarDia(slots) && slots.convidados === undefined;
-    if (nlu.intencao === 'agendar_visita' && nenhumDadoAinda) {
+    if (nlu.intencao === 'agendar_visita' && !temDadoDeOrcamento(slots)) {
       return {
         conversa: { ...base, estado: 'aguardando_pref_visita' },
         saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
@@ -380,7 +558,7 @@ function qualificar(
   // Todo o resto (fim de semana, ou dia de semana com mais de 80) vai direto
   // para a proposta normal, sem etapa de confirmação: o PDF já traz o valor de
   // fim de semana e de evento grande de dia de semana. Regra confirmada pela Raquel.
-  return avancarComData(base, slots, ctx);
+  return avancarComData(base, slots, nlu, ctx);
 }
 
 export function decidir(
@@ -413,7 +591,13 @@ export function decidir(
 
   // Visita técnica tem fluxo próprio (valida e repassa), em qualquer estado.
   if (nlu.intencao === 'visita_tecnica' || conversa.estado === 'visita_tecnica_data') {
-    return fluxoVisitaTecnica(base, slots, nlu, ctx);
+    // Na ENTRADA do fluxo, só a data desta mensagem vale como data da visita:
+    // sem isso, a data do CASAMENTO já coletada virava a data da visita técnica.
+    // Já DENTRO do fluxo, os slots mesclados combinam as partes dadas por turno
+    // (o cluster de data da conversa já é o da visita, ver fluxoVisitaTecnica).
+    const entrando = conversa.estado !== 'visita_tecnica_data';
+    const slotsData = entrando ? mesclarSlots({}, nlu.slots) : slots;
+    return fluxoVisitaTecnica(base, slotsData, nlu, ctx);
   }
 
   // Despedida em qualquer ponto (menos no meio de coletar dados que ela acabou de
@@ -443,9 +627,26 @@ export function decidir(
   if (motivo && conversa.estado !== 'novo') {
     return handoff(motivo);
   }
-  // No primeiro contato, só o caso "cliente já fechado" transborda de imediato.
+  // No primeiro contato, "cliente já fechado" transborda em silêncio; dúvida
+  // fora do script ou negociação apresenta o espaço E repassa a pergunta pra
+  // Raquel — antes a pergunta era engolida (o bot respondia só com a
+  // qualificação e a dúvida morria sem resposta).
   if (conversa.estado === 'novo' && nlu.intencao === 'cliente_fechado') {
     return handoff('cliente que já fechou');
+  }
+  if (
+    conversa.estado === 'novo' &&
+    motivo &&
+    (nlu.intencao === 'fora_do_script' || nlu.intencao === 'negociar')
+  ) {
+    return {
+      conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
+      saidas: [
+        texto(MSG.apresentacao(slots.nome)),
+        { tipo: 'pdf', pdf: 'apresentacao' },
+        pergunta(MSG.duvidaVouVerificar),
+      ],
+    };
   }
 
   switch (conversa.estado) {
@@ -458,12 +659,10 @@ export function decidir(
         { tipo: 'pdf', pdf: 'apresentacao' },
       ];
 
-      const jaVeioAlgumDado =
-        slots.data !== undefined ||
-        slots.ano !== undefined ||
-        slots.diaSemana !== undefined ||
-        slots.preferenciaDia !== undefined ||
-        slots.convidados !== undefined;
+      // Inclui as partes soltas de data (mesDia/mes/dia): quem abre com "quero
+      // orçamento pra 26 de janeiro" não pode receber a qualificadora pedindo a
+      // data de novo.
+      const jaVeioAlgumDado = temDadoDeOrcamento(slots);
 
       // Só quer conhecer o espaço (sem dados de orçamento): apresenta e já vai
       // para a preferência de visita, em vez de pedir dados de orçamento.
@@ -501,8 +700,34 @@ export function decidir(
       // wedding SÓ faz sentido como aceite. Sem isso, caía no fallback "sem
       // sim/não claro" e a proposta nunca era enviada.
       if (nlu.afirmativo || trouxeDadoDeOrcamento(nlu)) {
+        // O dado novo pode ter mudado o enquadramento ("na verdade vai ser no
+        // sábado", "vão ser 150"): re-qualifica em vez de mandar o mini errado.
+        // Só quando VEIO dado novo — um "sim" puro não muda nada do que já
+        // levou a conversa até a oferta do mini.
+        if (trouxeDadoDeOrcamento(nlu) && !ehMiniWedding(slots)) {
+          return qualificar({ ...base, estado: 'aguardando_qualificacao' }, slots, nlu, ctx);
+        }
+        // Data concreta em jogo: mesmas checagens do fluxo normal.
+        const dataISO = dataCompleta(slots);
+        if (dataISO && dataNoPassado(dataISO, ctx.agora)) {
+          return { conversa: base, saidas: [pergunta(vary(MSG.dataNoPassado, ctx.seed))] };
+        }
+        const checagem = checarDisponibilidade(base, slots, nlu, ctx);
+        if ('bloqueio' in checagem) return checagem.bloqueio;
+        // A alternativa adotada pode cair num dia que tira o evento do mini
+        // (ex.: um sábado): re-qualifica com a data nova em vez de mandar o mini.
+        // Só quando os slots MUDARAM (houve adoção) — no caminho comum a
+        // checagem devolve os mesmos slots e o enquadramento já foi validado.
+        if (checagem.slots !== slots && !ehMiniWedding(checagem.slots)) {
+          return qualificar(
+            { ...base, slots: checagem.slots, estado: 'aguardando_qualificacao' },
+            checagem.slots,
+            nlu,
+            ctx,
+          );
+        }
         return {
-          conversa: { ...base, estado: 'proposta_enviada' },
+          conversa: { ...base, slots: checagem.slots, estado: 'proposta_enviada' },
           saidas: [
             texto(MSG.orcamentoMiniAnuncio),
             { tipo: 'pdf', pdf: 'proposta_mini' },

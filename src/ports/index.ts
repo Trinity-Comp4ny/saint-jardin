@@ -144,6 +144,13 @@ export interface EventStore {
    * mensagem — o chamador NÃO deve processar de novo).
    */
   marcar(messageId: string): Promise<boolean>;
+  /**
+   * Solta a marca de um `messageId` (compensação). Usado quando a mensagem foi
+   * reivindicada mas NÃO chegou a ser enfileirada (fila/rate-limit falhou):
+   * sem isso, a reentrega da Meta seria descartada pelo dedup e a mensagem
+   * morreria sem resposta pra sempre.
+   */
+  desmarcar(messageId: string): Promise<void>;
 }
 
 export type TipoItemFila = 'texto' | 'audio' | 'outro';

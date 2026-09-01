@@ -95,8 +95,10 @@ export const MSG = {
 
   // A noiva já deu um dia e horário concretos: o bot acusa o que ela pediu e
   // repassa para a Raquel confirmar (o bot não fecha a agenda sozinho).
+  // Sempre em 1ª pessoa: o bot SE APRESENTA como Raquel, então nunca pode dizer
+  // "vou confirmar com a Raquel" (quebra a persona na cara da cliente).
   visitaComData: (quando: string): string =>
-    `Perfeito, anotei ${quando}. Vou confirmar com a Raquel e já te retorno, ok? ☺️`,
+    `Perfeito, anotei ${quando}. Vou confirmar aqui na agenda e já te retorno, ok? ☺️`,
 
   // Visita técnica (fornecedor de casamento fechado): regra e validação.
   perguntaDataVisitaTecnica:
@@ -120,11 +122,16 @@ export const MSG = {
     'Tranquilo! Quando fizer sentido, me chama que a gente continua de onde parou. 🌿',
   ],
 
-  // Não é noiva buscando orçamento (fornecedor, parceria, imprensa): o bot avisa
-  // que vai chamar a Raquel, em vez de empurrar o script de qualificação.
+  // Não é noiva buscando orçamento (fornecedor, parceria, imprensa): o bot acusa
+  // o recebimento e a Raquel de verdade assume dali (1ª pessoa: a persona É a
+  // Raquel, não pode "chamar a Raquel").
   fornecedorEncaminhar:
-    'Entendi! Nesse caso vou chamar a Raquel para te atender diretinho, ok? ' +
-    'Um instante. ☺️',
+    'Entendi! Já te atendo direitinho, só um instante, ok? ☺️',
+
+  // Dúvida fora do script ou pedido de negociação logo no PRIMEIRO contato:
+  // apresenta o espaço e avisa que já responde a pergunta (a Raquel assume).
+  duvidaVouVerificar:
+    'Sobre o que você perguntou, vou verificar direitinho e já te respondo, ok? ☺️',
 
   pedirDadosFaltantes: (faltando: string[], i = 0): string => {
     const o = faltando.join(' e ');
@@ -139,9 +146,15 @@ export const MSG = {
     return variantes[idx] ?? variantes[0] ?? '';
   },
 
+  // `data` chega em DD/MM/YYYY e `alternativa` já descrita ("sábado (16/10/2027)"):
+  // nunca ISO cru na conversa com a cliente.
   dataIndisponivel: (data: string, alternativa: string): string =>
     `Poxa, a data ${data} já está reservada. 😕 Consigo te oferecer ${alternativa}. ` +
     `Teria essa ou outra data em mente?`,
+
+  // O calendário não achou nenhuma data livre à frente para sugerir.
+  dataIndisponivelSemAlternativa: (data: string): string =>
+    `Poxa, a data ${data} já está reservada. 😕 Você teria outra data em mente?`,
 
   dataNoPassado: [
     'Essa data já passou. ☺️ Você tem uma data mais pra frente em mente?',
@@ -155,16 +168,16 @@ export const MSG = {
 
   // Transcrição do áudio falhou (Gemini indisponível, rate limit, formato etc.).
   // Diz o que houve e o próximo passo, sem termos técnicos e sem culpar a noiva.
+  // 1ª pessoa (a persona é a Raquel): nada de "vou chamar a Raquel".
   audioNaoEntendido:
     'Recebi seu áudio, mas não consegui ouvir direito por aqui. ' +
-    'Pode me mandar por texto? Já vou chamar a Raquel para dar uma olhada também. ☺️',
+    'Pode me mandar por texto, por favor? ☺️',
 
   // Rede de segurança: qualquer erro inesperado no processamento do turno
   // (não só transcrição). Mesmo tom: o que houve e o próximo passo, sem
   // termo técnico e sem culpar a cliente.
   erroInesperado:
-    'Tive um problema aqui pra processar sua mensagem. Já chamei a Raquel ' +
-    'pra te ajudar, ok? ☺️',
+    'Tive um problema aqui pra processar sua mensagem. Já já te respondo, ok? ☺️',
 
   // Figurinha, reação (👍), imagem, documento, localização etc.: o bot não lê
   // nada disso. Sem essa resposta, quem reage achando que respondeu ficava

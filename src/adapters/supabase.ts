@@ -42,14 +42,32 @@ export class SupabaseContatoRepo implements ContatoRepository {
   }
 
   async buscarPorNomeOuData(nome?: string, dataEvento?: string): Promise<Contato | null> {
-    let query = this.db.from('contatos').select('telefone, nome, status, data_evento');
-    if (nome && dataEvento) query = query.or(`nome.ilike.${nome},data_evento.eq.${dataEvento}`);
-    else if (nome) query = query.ilike('nome', nome);
-    else if (dataEvento) query = query.eq('data_evento', dataEvento);
-    else return null;
-
-    const { data } = await query.limit(1).maybeSingle();
-    return data ? mapContato(data) : null;
+    // Duas queries em vez de `.or(...)` com valor interpolado: o nome vem da NLU
+    // (texto da cliente) e, dentro da string do filtro PostgREST, "," e "()"
+    // permitiam injetar condições novas; "%"/"_" viravam curinga do ilike (um
+    // "%" casaria QUALQUER contato fechado e derrubaria a conversa em handoff).
+    if (nome) {
+      const nomeLimpo = nome.replace(/[%_,()]/g, ' ').replace(/\s+/g, ' ').trim();
+      if (nomeLimpo) {
+        const { data } = await this.db
+          .from('contatos')
+          .select('telefone, nome, status, data_evento')
+          .ilike('nome', nomeLimpo)
+          .limit(1)
+          .maybeSingle();
+        if (data) return mapContato(data);
+      }
+    }
+    if (dataEvento) {
+      const { data } = await this.db
+        .from('contatos')
+        .select('telefone, nome, status, data_evento')
+        .eq('data_evento', dataEvento)
+        .limit(1)
+        .maybeSingle();
+      if (data) return mapContato(data);
+    }
+    return null;
   }
 }
 
@@ -136,6 +154,16 @@ export class SupabaseEventStore implements EventStore {
     if (error.code === '23505') return false;
     throw new Error(`marcar evento: ${error.message}`);
   }
+
+  async desmarcar(messageId: string): Promise<void> {
+    // Compensação: solta a marca quando a mensagem não chegou a ser enfileirada,
+    // para a reentrega da Meta não ser descartada pelo dedup.
+    const { error } = await this.db
+      .from('eventos_processados')
+      .delete()
+      .eq('message_id', messageId);
+    if (error) throw new Error(`desmarcar evento: ${error.message}`);
+  }
 }
 
 export class SupabaseFila implements Fila {
@@ -157,14 +185,24 @@ export class SupabaseFila implements Fila {
     // seleciona (WHERE processado_em IS NULL). Se dois consumidores rodam ao
     // mesmo tempo (cron sobreposto, ou cron + chamada manual), cada linha é
     // reivindicada por apenas um — evita processar/responder o mesmo item 2x.
+    // `_limite` é IGNORADO de propósito: supabase-js não limita UPDATE, e
+    // limitar depois de reivindicar perderia os itens excedentes (já marcados
+    // como processados sem nunca serem atendidos). No volume atual o lote é
+    // pequeno; se crescer, trocar por RPC com `LIMIT ... FOR UPDATE SKIP LOCKED`.
     const { data, error } = await this.db
       .from('fila_mensagens')
       .update({ processado_em: new Date().toISOString() })
       .is('processado_em', null)
       .lte('processar_apos', agoraISO)
-      .select('id, telefone, tipo, conteudo, processar_apos, mensagem_id');
+      .select('id, telefone, tipo, conteudo, processar_apos, mensagem_id, criado_em');
     if (error) throw new Error(`pegarVencidas: ${error.message}`);
-    return (data ?? []).map((r) => ({
+    // UPDATE ... RETURNING não tem ordem garantida no Postgres: ordena pela
+    // chegada (criado_em), senão uma rajada ("Boa tarde" + "150 convidados")
+    // podia ser lida fora de ordem pelo NLU.
+    const ordenadas = [...(data ?? [])].sort((a, b) =>
+      String(a.criado_em).localeCompare(String(b.criado_em)),
+    );
+    return ordenadas.map((r) => ({
       id: String(r.id),
       telefone: String(r.telefone),
       tipo: r.tipo === 'audio' ? 'audio' : r.tipo === 'outro' ? 'outro' : 'texto',

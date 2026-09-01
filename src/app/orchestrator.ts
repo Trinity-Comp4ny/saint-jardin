@@ -124,7 +124,13 @@ export async function processarMensagem(
     historico = [];
   }
 
-  await deps.mensagens?.registrar(telefone, 'entrada', 'texto', texto);
+  // Best-effort como o histórico: o log é auditoria/contexto — uma falha aqui
+  // não pode virar handoff de "erro inesperado" num turno que responderia bem.
+  try {
+    await deps.mensagens?.registrar(telefone, 'entrada', 'texto', texto);
+  } catch {
+    // Sem log desta entrada: o turno segue; o histórico só fica 1 msg mais curto.
+  }
 
   // Comando de teste: só vale para os números em `numerosTeste` (vazio em
   // produção, então inerte). Zera a conversa para recomeçar do 'novo'.
@@ -211,13 +217,19 @@ export async function processarMensagem(
     // lido, para a conversa continuar não lida para a Raquel.
     if (messageId && botResolveu) await deps.messaging.mostrarDigitando(messageId);
     await deps.messaging.enviar(telefone, saidasFinais);
+    // Best-effort: as mensagens JÁ FORAM enviadas — uma falha de log aqui não
+    // pode derrubar o turno (viraria handoff + "erro" depois da resposta certa).
     for (const s of saidasFinais) {
-      await deps.mensagens?.registrar(
-        telefone,
-        'saida',
-        s.tipo === 'pdf' ? 'pdf' : 'texto',
-        s.tipo === 'pdf' ? (s.pdf ?? '') : (s.texto ?? ''),
-      );
+      try {
+        await deps.mensagens?.registrar(
+          telefone,
+          'saida',
+          s.tipo === 'pdf' ? 'pdf' : 'texto',
+          s.tipo === 'pdf' ? (s.pdf ?? '') : (s.texto ?? ''),
+        );
+      } catch {
+        // Só o histórico fica incompleto.
+      }
     }
   } else if (messageId && botResolveu) {
     // Resolveu em silêncio (ex.: 'encerrada' já quieta): marca lido, sem digitar.

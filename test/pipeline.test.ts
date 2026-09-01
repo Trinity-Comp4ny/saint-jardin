@@ -295,6 +295,9 @@ function eventStoreVazio(): EventStore {
       vistos.add(id);
       return true;
     },
+    async desmarcar(id) {
+      vistos.delete(id);
+    },
   };
 }
 
@@ -327,6 +330,34 @@ function webhookTexto(id: string, from: string, texto: string): unknown {
     ],
   };
 }
+
+describe('ingerirWebhook — falha depois do dedup solta a marca (mensagem não morre)', () => {
+  it('se enfileirar falhar, desmarca o messageId e propaga o erro (Meta reentrega)', async () => {
+    const eventos = eventStoreVazio();
+    const filaQuebrada: Fila = {
+      async enfileirar() {
+        throw new Error('supabase fora do ar');
+      },
+      async pegarVencidas() {
+        return [];
+      },
+      async marcarProcessado() {},
+      async contarRecentes() {
+        return 0;
+      },
+    };
+    await expect(
+      ingerirWebhook(webhookTexto('wamid.falha', '5511999', 'oi'), {
+        eventos,
+        fila: filaQuebrada,
+        agora: () => '2026-09-01T12:00:00.000Z',
+        delaySegundos: 0,
+      }),
+    ).rejects.toThrow(/fora do ar/);
+    // A marca foi solta: a reentrega da Meta processa como primeira vez.
+    expect(await eventos.marcar('wamid.falha')).toBe(true);
+  });
+});
 
 describe('ingerirWebhook — rate limit por telefone (ADR-0009)', () => {
   it('enfileira normalmente quando está abaixo do limite', async () => {
