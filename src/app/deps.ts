@@ -7,7 +7,7 @@
 
 import { GeminiNLU } from '../adapters/GeminiNLU';
 import { GeminiRedator } from '../adapters/GeminiRedator';
-import { GroqTranscriber, type Transcriber } from '../adapters/GroqTranscriber';
+import { GeminiTranscriber } from '../adapters/GeminiTranscriber';
 import { TelegramNotifier } from '../adapters/TelegramNotifier';
 import { WhatsAppCloudProvider } from '../adapters/WhatsAppCloudProvider';
 import {
@@ -21,7 +21,7 @@ import {
 } from '../adapters/supabase';
 import { PDF_CATALOGO } from '../domain/pdfs';
 import type { TipoPdf } from '../domain/types';
-import type { EventStore, Fila, Notifier } from '../ports';
+import type { EventStore, Fila, Notifier, Transcriber } from '../ports';
 import type { Deps } from './orchestrator';
 
 function obrigatorio(nome: string): string {
@@ -39,19 +39,9 @@ function criarDb() {
   );
 }
 
-// Groq (áudio) e Telegram (handoff) são usados só em ramos específicos do fluxo.
-// Instanciamos de forma lazy: a env só é exigida quando o recurso é de fato usado,
-// não ao montar as deps. Assim texto sem handoff roda sem GROQ/TELEGRAM configurados.
-function transcriberLazy(whatsappToken: string): Transcriber {
-  let real: Transcriber | null = null;
-  return {
-    transcrever(mediaId) {
-      real ??= new GroqTranscriber({ groqApiKey: obrigatorio('GROQ_API_KEY'), whatsappToken });
-      return real.transcrever(mediaId);
-    },
-  };
-}
-
+// Telegram (handoff) é usado só num ramo específico do fluxo. Instanciamos de
+// forma lazy: a env só é exigida quando o recurso é de fato usado, não ao montar
+// as deps. Assim uma conversa sem handoff roda sem TELEGRAM configurado.
 function notifierLazy(): Notifier {
   let real: Notifier | null = null;
   return {
@@ -89,6 +79,7 @@ export interface ProcessAppDeps {
 export function montarProcessDeps(): ProcessAppDeps {
   const db = criarDb();
   const whatsappToken = obrigatorio('WHATSAPP_TOKEN');
+  const geminiApiKey = obrigatorio('GEMINI_API_KEY');
 
   const messaging = new WhatsAppCloudProvider({
     phoneNumberId: obrigatorio('WHATSAPP_PHONE_NUMBER_ID'),
@@ -115,8 +106,8 @@ export function montarProcessDeps(): ProcessAppDeps {
   const orquestrador: Deps = {
     contatos: new SupabaseContatoRepo(db),
     conversas: new SupabaseConversaRepo(db),
-    nlu: new GeminiNLU(obrigatorio('GEMINI_API_KEY')),
-    redator: new GeminiRedator(obrigatorio('GEMINI_API_KEY')),
+    nlu: new GeminiNLU(geminiApiKey),
+    redator: new GeminiRedator(geminiApiKey),
     calendario: new SupabaseCalendario(db),
     messaging,
     notifier: notifierLazy(),
@@ -128,6 +119,6 @@ export function montarProcessDeps(): ProcessAppDeps {
   return {
     orquestrador,
     fila: new SupabaseFila(db),
-    transcriber: transcriberLazy(whatsappToken),
+    transcriber: new GeminiTranscriber({ geminiApiKey, whatsappToken }),
   };
 }

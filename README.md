@@ -10,7 +10,7 @@ Documentação em [`docs/`](docs/README.md). Arquitetura no
 
 - **Fase 0 (fundação, sem WhatsApp): concluída.** Núcleo do agente com testes.
 - **Fase 1 (canal WhatsApp): implementada.** Webhook da Cloud API, validação de assinatura,
-  fila com delay, transcrição de áudio (Groq), alerta de handoff (Telegram) e repositórios Supabase.
+  fila com delay, transcrição de áudio (Gemini), alerta de handoff (Telegram) e repositórios Supabase.
   Falta o setup externo (número de teste da Meta, projeto Supabase, deploy) para exercitar de ponta a ponta.
 
 Ver [roadmap](docs/03-adr/0004-arquitetura.md#roadmap-incremental).
@@ -38,7 +38,7 @@ npm run dev       # sobe o app Next (webhook em /api/whatsapp, health em /api/he
 1. Projeto Supabase (região São Paulo); rodar as migrations em `supabase/migrations/`.
 2. Bucket privado `propostas` no Supabase Storage com os 4 PDFs.
 3. App na Meta (WhatsApp) + número de teste; configurar webhook apontando para a URL do deploy.
-4. Bot do Telegram + `TELEGRAM_CHAT_ID`. Chave do Groq. Preencher `.env` (ver `.env.example`).
+4. Bot do Telegram + `TELEGRAM_CHAT_ID`. Preencher `.env` (ver `.env.example`).
 5. Agendar `/api/process` via pg_cron (ver `supabase/migrations/0002_fila.sql`).
 
 ## Estrutura do código

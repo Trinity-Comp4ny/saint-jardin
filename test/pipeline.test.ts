@@ -8,9 +8,9 @@ import {
   RecordingNotifier,
   SandboxProvider,
 } from '../src/adapters/memory';
-import type { Fila, ItemFila, NLU } from '../src/ports';
+import type { Fila, ItemFila, NLU, Transcriber } from '../src/ports';
 import type { Conversa, EntradaNLU } from '../src/domain/types';
-import type { Transcriber } from '../src/adapters/GroqTranscriber';
+import { MSG } from '../src/domain/persona';
 
 function filaCom(itens: ItemFila[]): { fila: Fila; processados: string[] } {
   const processados: string[] = [];
@@ -159,5 +159,54 @@ describe('processarFila — lida/não-lida na caixa da Raquel', () => {
     await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
 
     expect(messaging.digitando).toEqual([]);
+  });
+});
+
+describe('processarFila — falha ao transcrever áudio', () => {
+  function itemAudio(id: string, telefone: string, mediaId: string, mensagemId?: string): ItemFila {
+    return {
+      id,
+      telefone,
+      tipo: 'audio',
+      conteudo: mediaId,
+      processarApos: '2026-07-30T11:59:00.000Z',
+      ...(mensagemId ? { mensagemId } : {}),
+    };
+  }
+
+  const transcriberQuebrado: Transcriber = {
+    async transcrever() {
+      throw new Error('Gemini 401: chave inválida');
+    },
+  };
+
+  it('avisa a noiva, dispara handoff e não perde a mensagem silenciosamente', async () => {
+    const { fila, processados } = filaCom([itemAudio('1', '5511999', 'media-abc', 'wamid.A')]);
+    const { nlu, textos } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const notifier = new RecordingNotifier();
+    const deps: Deps = { ...orquestrador(nlu), messaging, notifier };
+
+    await processarFila({ fila, transcriber: transcriberQuebrado, orquestrador: deps });
+
+    expect(textos).toHaveLength(0); // NLU nunca chamado com contexto incompleto
+    expect(messaging.enviadas).toHaveLength(1);
+    expect(messaging.enviadas[0]?.saidas[0]?.texto).toBe(MSG.audioNaoEntendido);
+    expect(notifier.alertas).toEqual([
+      { telefone: '5511999', motivo: 'áudio recebido, mas a transcrição falhou' },
+    ]);
+    expect(processados).toEqual(['1']); // item ainda é marcado como processado
+  });
+
+  it('mesmo com falha, a conversa é persistida em handoff (bot para de responder)', async () => {
+    const { fila } = filaCom([itemAudio('1', '5511999', 'media-abc')]);
+    const { nlu } = nluEspiao();
+    const conversas = new InMemoryConversaRepo();
+    const deps: Deps = { ...orquestrador(nlu), conversas };
+
+    await processarFila({ fila, transcriber: transcriberQuebrado, orquestrador: deps });
+
+    const conversa = await conversas.obter('5511999');
+    expect(conversa?.estado).toBe('handoff');
   });
 });

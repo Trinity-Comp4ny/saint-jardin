@@ -148,4 +148,10 @@ export const MSG = {
   followUp:
     'Oi! Passando pra saber se ficou alguma dúvida sobre o Saint Jardin. ' +
     'Posso te ajudar a garantir sua data? ☺️',
+
+  // Transcrição do áudio falhou (Gemini indisponível, rate limit, formato etc.).
+  // Diz o que houve e o próximo passo, sem termos técnicos e sem culpar a noiva.
+  audioNaoEntendido:
+    'Recebi seu áudio, mas não consegui ouvir direito por aqui. ' +
+    'Pode me mandar por texto? Já vou chamar a Raquel para dar uma olhada também. ☺️',
 } as const;

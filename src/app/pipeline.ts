@@ -3,8 +3,10 @@
 
 import { parseWebhook } from '../whatsapp/parseWebhook';
 import { processarMensagem, type Deps } from './orchestrator';
-import type { EventStore, Fila } from '../ports';
-import type { Transcriber } from '../adapters/GroqTranscriber';
+import { novaConversa } from '../domain/stateMachine';
+import { MSG } from '../domain/persona';
+import type { Conversa } from '../domain/types';
+import type { EventStore, Fila, Transcriber } from '../ports';
 
 /** Adiciona `segundos` a um instante ISO. Puro (testável). */
 export function adiarISO(agoraISO: string, segundos: number): string {
@@ -65,6 +67,31 @@ export interface ProcessDeps {
 }
 
 /**
+ * Transcrição do áudio falhou (Gemini indisponível, rate limit, formato etc.): sem
+ * isso, o item era marcado como processado e a mensagem sumia sem resposta nem
+ * aviso para a Raquel. Avisa a noiva (pede texto) e dispara handoff. Best-effort:
+ * uma falha aqui não pode derrubar o resto da fila.
+ */
+async function avisarFalhaTranscricao(deps: Deps, telefone: string): Promise<void> {
+  try {
+    const conversa = (await deps.conversas.obter(telefone)) ?? novaConversa(telefone, deps.agora());
+    const motivo = 'áudio recebido, mas a transcrição falhou';
+    const atualizada: Conversa = {
+      ...conversa,
+      estado: 'handoff',
+      motivoHandoff: motivo,
+      atualizadoEm: deps.agora(),
+    };
+    await deps.conversas.salvar(atualizada);
+    await deps.messaging.enviar(telefone, [{ tipo: 'texto', texto: MSG.audioNaoEntendido }]);
+    await deps.notifier.alertarHandoff(atualizada, motivo);
+  } catch {
+    // Nada mais a fazer: o item já será marcado como processado no finally do
+    // chamador; ao menos tentamos avisar os dois lados antes de desistir.
+  }
+}
+
+/**
  * Processa os itens vencidos da fila (chamado pelo pg_cron a cada minuto).
  * AGRUPA as mensagens do mesmo telefone (rajada: "Boa tarde" + "tudo bem?" +
  * "vou passar") num único turno, para o bot responder uma vez com todo o
@@ -87,20 +114,33 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
   for (const [telefone, grupo] of grupos) {
     try {
       const partes: string[] = [];
+      let falhaAudio = false;
       for (const item of grupo) {
-        const texto =
-          item.tipo === 'audio'
-            ? await deps.transcriber.transcrever(item.conteudo)
-            : item.conteudo;
-        if (texto) partes.push(texto);
+        if (item.tipo === 'audio') {
+          try {
+            const texto = await deps.transcriber.transcrever(item.conteudo);
+            if (texto) partes.push(texto);
+          } catch {
+            falhaAudio = true;
+          }
+        } else if (item.conteudo) {
+          partes.push(item.conteudo);
+        }
       }
-      const mensagem = partes.join('\n');
-      if (mensagem) {
-        // Passa o id da última mensagem da rajada: o orquestrador cuida do
-        // read/unread e do "digitando" (marca lido só quando o bot resolve, não
-        // em handoff, para a conversa que precisa da Raquel ficar não lida).
-        const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
-        await processarMensagem(telefone, mensagem, deps.orquestrador, ultimoId);
+
+      if (falhaAudio) {
+        // Não segue para o NLU com contexto incompleto: a conversa já vai para
+        // handoff, e o orquestrador ignoraria a mensagem mesmo (estado 'handoff').
+        await avisarFalhaTranscricao(deps.orquestrador, telefone);
+      } else {
+        const mensagem = partes.join('\n');
+        if (mensagem) {
+          // Passa o id da última mensagem da rajada: o orquestrador cuida do
+          // read/unread e do "digitando" (marca lido só quando o bot resolve, não
+          // em handoff, para a conversa que precisa da Raquel ficar não lida).
+          const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
+          await processarMensagem(telefone, mensagem, deps.orquestrador, ultimoId);
+        }
       }
     } finally {
       for (const item of grupo) await deps.fila.marcarProcessado(item.id);

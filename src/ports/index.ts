@@ -126,6 +126,11 @@ export interface Notifier {
   alertarHandoff(conversa: Conversa, motivo: string): Promise<void>;
 }
 
+/** Transcrição de áudio (texto já pronto para a leitura do NLU). */
+export interface Transcriber {
+  transcrever(mediaId: string): Promise<string>;
+}
+
 /** Idempotência: a Meta reentrega webhooks; evita processar a mesma msg 2x. */
 export interface EventStore {
   jaVisto(messageId: string): Promise<boolean>;

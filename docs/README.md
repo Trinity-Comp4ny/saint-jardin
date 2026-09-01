@@ -26,7 +26,7 @@ Responsável técnico: **Matheus**.
 
 Descoberta e arquitetura concluídas. **Fase 0 e Fase 1 implementadas** (ver [README](../README.md)):
 núcleo do agente em sandbox com testes, mais a camada de WhatsApp (webhook Cloud API, assinatura,
-fila com delay, transcrição Groq, alerta Telegram, repos Supabase). 27 testes verdes, build ok.
+fila com delay, transcrição via Gemini, alerta Telegram, repos Supabase). 27 testes verdes, build ok.
 Decisões travadas em 21/07: API oficial + coexistência, mesmo número, identificação por banco,
 sem painel no MVP, persona "Raquel", preço só via PDF.
 
