@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHmac } from 'node:crypto';
 import { GET, POST } from '../app/api/whatsapp/route';
+import { numeroEnv } from '../src/app/pipeline';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -44,5 +45,29 @@ describe('GET /api/whatsapp — falha fechado sem WHATSAPP_VERIFY_TOKEN', () => 
     const url = 'http://localhost/api/whatsapp?hub.mode=subscribe&hub.verify_token=&hub.challenge=123';
     const resp = await GET(new Request(url));
     expect(resp.status).toBe(403);
+  });
+});
+
+describe('numeroEnv — regressão: env var vazia ou inválida não pode virar 0/NaN silencioso', () => {
+  it('usa o default quando a env var não existe', () => {
+    expect(numeroEnv(undefined, 30)).toBe(30);
+  });
+
+  it('usa o default quando a env var está vazia (RATE_LIMIT_MAX_MENSAGENS="" bloqueava todo mundo)', () => {
+    expect(numeroEnv('', 30)).toBe(30);
+  });
+
+  it('usa o default quando a env var não é um número (typo desligava o rate limit)', () => {
+    expect(numeroEnv('abc', 30)).toBe(30);
+  });
+
+  it('usa o valor configurado quando é um número válido', () => {
+    expect(numeroEnv('15', 30)).toBe(15);
+  });
+
+  it('aceita 0 explícito como valor válido (diferente de "" vazio)', () => {
+    // 0 é um número válido escolhido de propósito (ex.: JITTER_SEGUNDOS=0);
+    // só "" e valores não numéricos devem cair no default, não o número 0.
+    expect(numeroEnv('0', 30)).toBe(0);
   });
 });

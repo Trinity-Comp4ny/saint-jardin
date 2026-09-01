@@ -13,6 +13,19 @@ export function adiarISO(agoraISO: string, segundos: number): string {
   return new Date(new Date(agoraISO).getTime() + segundos * 1000).toISOString();
 }
 
+/**
+ * Lê um número de env var com fallback seguro. `??` só cobre undefined/null —
+ * `RATE_LIMIT_MAX_MENSAGENS=""` (var criada mas vazia) virava `Number('')` = 0,
+ * o que bloqueava TODA mensagem de todo mundo silenciosamente; e um typo tipo
+ * "abc" virava NaN, que desligava o rate limit sem avisar. Trata os três casos
+ * (ausente, vazio, não numérico) como "usar o default".
+ */
+export function numeroEnv(valor: string | undefined, valorPadrao: number): number {
+  if (!valor) return valorPadrao;
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : valorPadrao;
+}
+
 export interface IngestDeps {
   eventos: EventStore;
   fila: Fila;

@@ -5,7 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { assinaturaValida, verificarHandshake } from '../../../src/whatsapp/verifySignature';
-import { ingerirWebhook, processarFila } from '../../../src/app/pipeline';
+import { ingerirWebhook, numeroEnv, processarFila } from '../../../src/app/pipeline';
 import { montarIngestDeps, montarProcessDeps } from '../../../src/app/deps';
 
 export const runtime = 'nodejs';
@@ -50,10 +50,10 @@ export async function POST(req: Request): Promise<Response> {
     eventos,
     fila,
     agora: () => new Date().toISOString(),
-    delaySegundos: teste ? 0 : Number(process.env.DELAY_SEGUNDOS ?? '60'),
-    jitterSegundos: teste ? 0 : Number(process.env.JITTER_SEGUNDOS ?? '0'),
-    limiteMensagens: Number(process.env.RATE_LIMIT_MAX_MENSAGENS ?? '30'),
-    janelaLimiteMinutos: Number(process.env.RATE_LIMIT_JANELA_MINUTOS ?? '60'),
+    delaySegundos: teste ? 0 : numeroEnv(process.env.DELAY_SEGUNDOS, 60),
+    jitterSegundos: teste ? 0 : numeroEnv(process.env.JITTER_SEGUNDOS, 0),
+    limiteMensagens: numeroEnv(process.env.RATE_LIMIT_MAX_MENSAGENS, 30),
+    janelaLimiteMinutos: numeroEnv(process.env.RATE_LIMIT_JANELA_MINUTOS, 60),
   });
 
   if (teste && enfileiradas > 0) {
