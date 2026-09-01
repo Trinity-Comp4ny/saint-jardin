@@ -153,7 +153,7 @@ Extraia (deixe null o que a mensagem não disser):
 - slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser dia E mês JUNTOS (ex.: "26 de janeiro" -> "01-26", "30 de outubro" -> "10-30"). Deixe null se ela já deu o ano (use data) ou se não citou dia e mês juntos.
 - slots.mes: número do mês (1-12) quando ela citar SÓ o mês, sem o dia (ex.: "penso em outubro" -> 10). Deixe null se já deu dia e mês juntos (use mesDia).
 - slots.dia: número do dia do mês (1-31) quando ela citar SÓ o dia, sem o mês. Em especial, se já perguntamos a DATA e a mensagem é só um número (ex.: "30", "dia 12"), é o dia do evento -> slots.dia. Deixe null se não for um dia de evento.
-- slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data). Aceite dois dígitos: "28" -> 2028, "27" -> 2027.
+- slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data). Aceite dois dígitos: "28" -> 2028, "27" -> 2027. Aceite também expressão relativa em vez do número: "ano que vem", "o próximo ano", "ano seguinte", "esse ano" -> 2027 (o espaço só fecha para 2027 ou 2028, nunca para o ano corrente).
 - slots.diaSemana: o dia da semana exato, se citado (ex.: "sábado" -> sabado, sem acento).
 - slots.preferenciaDia: "fim_de_semana" (sábado/domingo) ou "dia_de_semana" (segunda a sexta),
   quando a pessoa fala de forma genérica sem citar o dia exato.
