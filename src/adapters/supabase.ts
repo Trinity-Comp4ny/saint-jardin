@@ -167,7 +167,7 @@ export class SupabaseFila implements Fila {
     return (data ?? []).map((r) => ({
       id: String(r.id),
       telefone: String(r.telefone),
-      tipo: r.tipo === 'audio' ? 'audio' : 'texto',
+      tipo: r.tipo === 'audio' ? 'audio' : r.tipo === 'outro' ? 'outro' : 'texto',
       conteudo: String(r.conteudo ?? ''),
       processarApos: String(r.processar_apos),
       ...(r.mensagem_id ? { mensagemId: String(r.mensagem_id) } : {}),

@@ -165,4 +165,10 @@ export const MSG = {
   erroInesperado:
     'Tive um problema aqui pra processar sua mensagem. Já chamei a Raquel ' +
     'pra te ajudar, ok? ☺️',
+
+  // Figurinha, reação (👍), imagem, documento, localização etc.: o bot não lê
+  // nada disso. Sem essa resposta, quem reage achando que respondeu ficava
+  // sem retorno nenhum, achando que travou.
+  tipoNaoSuportado:
+    'Por aqui só consigo entender texto e áudio. Pode me responder em texto? ☺️',
 } as const;

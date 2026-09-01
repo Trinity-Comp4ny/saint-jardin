@@ -146,7 +146,7 @@ export interface EventStore {
   marcar(messageId: string): Promise<boolean>;
 }
 
-export type TipoItemFila = 'texto' | 'audio';
+export type TipoItemFila = 'texto' | 'audio' | 'outro';
 
 export interface ItemFila {
   id: string;

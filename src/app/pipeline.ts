@@ -67,7 +67,6 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
   let enfileiradas = 0;
 
   for (const msg of mensagens) {
-    if (msg.tipo === 'outro') continue;
     // Dedup ATÔMICO: `marcar` é o próprio check-and-set (via constraint de
     // unicidade no banco), não duas chamadas separadas com janela de corrida
     // entre elas. Sob reentrega concorrente real da Meta pro mesmo messageId,
@@ -75,10 +74,16 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
     const primeiraVez = await deps.eventos.marcar(msg.messageId);
     if (!primeiraVez) continue;
 
+    // 'outro' = figurinha, reação, imagem, documento, localização etc. Sem
+    // conteúdo de texto real pra extrair, mas ainda entra na fila: sem isso a
+    // noiva que reage com 👍 (achando que respondeu) fica sem retorno nenhum,
+    // achando que travou (`processarFila` avisa que só entende texto/áudio).
     const conteudo =
       msg.tipo === 'audio'
         ? (msg.mediaId ?? '')
-        : (msg.texto ?? '').slice(0, MAX_CARACTERES_MENSAGEM);
+        : msg.tipo === 'outro'
+          ? 'outro'
+          : (msg.texto ?? '').slice(0, MAX_CARACTERES_MENSAGEM);
     if (!conteudo) continue;
 
     const desdeISO = adiarISO(deps.agora(), -janelaSegundos);
@@ -176,6 +181,7 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
       if (!jaComARaquel) {
         const partes: string[] = [];
         let falhaAudio = false;
+        let temTipoNaoSuportado = false;
         for (const item of grupo) {
           if (item.tipo === 'audio') {
             try {
@@ -184,6 +190,8 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
             } catch {
               falhaAudio = true;
             }
+          } else if (item.tipo === 'outro') {
+            temTipoNaoSuportado = true;
           } else if (item.conteudo) {
             partes.push(item.conteudo);
           }
@@ -200,12 +208,20 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
           );
         } else {
           const mensagem = partes.join('\n');
+          const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
           if (mensagem) {
             // Passa o id da última mensagem da rajada: o orquestrador cuida do
             // read/unread e do "digitando" (marca lido só quando o bot resolve, não
             // em handoff, para a conversa que precisa da Raquel ficar não lida).
-            const ultimoId = [...grupo].reverse().find((i) => i.mensagemId)?.mensagemId;
             await processarMensagem(telefone, mensagem, deps.orquestrador, ultimoId);
+          } else if (temTipoNaoSuportado) {
+            // Rajada só trouxe figurinha/reação/imagem/documento/localização
+            // etc., nada que dê pra ler: avisa que só entende texto/áudio, sem
+            // gastar NLU e sem virar handoff (não precisa de humano pra isso).
+            if (ultimoId) await deps.orquestrador.messaging.mostrarDigitando(ultimoId);
+            await deps.orquestrador.messaging.enviar(telefone, [
+              { tipo: 'texto', texto: MSG.tipoNaoSuportado },
+            ]);
           }
         }
       }

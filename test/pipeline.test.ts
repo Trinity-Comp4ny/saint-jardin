@@ -435,3 +435,46 @@ describe('ingerirWebhook — dedup atômico sob concorrência real (regressão)'
     expect(enfileiradas).toHaveLength(1);
   });
 });
+
+describe('processarFila — figurinha/reação/imagem (tipo "outro") avisa em vez de ficar muda', () => {
+  function itemOutro(id: string, telefone: string, mensagemId?: string): ItemFila {
+    return {
+      id,
+      telefone,
+      tipo: 'outro',
+      conteudo: 'outro',
+      processarApos: '2026-07-30T11:59:00.000Z',
+      ...(mensagemId ? { mensagemId } : {}),
+    };
+  }
+
+  it('rajada só com tipo não suportado (ex.: reação 👍) avisa que só entende texto/áudio, sem chamar o NLU', async () => {
+    const { fila, processados } = filaCom([itemOutro('1', '5511999', 'wamid.A')]);
+    const { nlu, textos } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const deps: Deps = { ...orquestrador(nlu), messaging };
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    expect(textos).toHaveLength(0); // NLU nunca chamado
+    expect(messaging.enviadas.find((e) => e.telefone === '5511999')?.saidas[0]?.texto).toBe(
+      MSG.tipoNaoSuportado,
+    );
+    expect(messaging.digitando).toEqual(['wamid.A']); // resolve como um turno normal, marca lido
+    expect(processados).toEqual(['1']);
+  });
+
+  it('rajada mista (texto real + tipo não suportado) processa o texto normalmente, sem aviso extra', async () => {
+    const { fila } = filaCom([item('1', '5511999', 'oi, quero orçamento'), itemOutro('2', '5511999')]);
+    const { nlu, textos } = nluEspiao();
+    const messaging = new SandboxProvider();
+    const deps: Deps = { ...orquestrador(nlu), messaging };
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    expect(textos).toEqual(['oi, quero orçamento']); // NLU chamado normalmente com o texto real
+    expect(
+      messaging.enviadas.some((e) => e.saidas.some((s) => s.texto === MSG.tipoNaoSuportado)),
+    ).toBe(false); // não soma aviso extra: ela já teve resposta de verdade
+  });
+});
