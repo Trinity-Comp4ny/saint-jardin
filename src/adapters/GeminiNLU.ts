@@ -79,10 +79,14 @@ const responseSchema = {
 } as const;
 
 // Coerção tolerante: o LLM às vezes manda número como string ("2027").
+// Faixa de convidados (1 a 5000): descarta 0/negativo (não é um evento) e
+// exagero óbvio ("99999999", "duas mil" de brincadeira) — fora da faixa
+// degrada pra "não informado" e a máquina de estados pergunta de novo, em vez
+// de mandar uma proposta pra um número de convidados que não faz sentido.
 const numeroOpcional = z
   .preprocess(
     (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? undefined : Number(v)),
-    z.number().optional(),
+    z.number().int().positive().max(5000).optional(),
   )
   .catch(undefined);
 
@@ -153,16 +157,16 @@ Extraia (deixe null o que a mensagem não disser):
 - slots.mesDia: dia e mês SEM ano, no formato "MM-DD", quando a noiva disser dia E mês JUNTOS (ex.: "26 de janeiro" -> "01-26", "30 de outubro" -> "10-30"). Deixe null se ela já deu o ano (use data) ou se não citou dia e mês juntos.
 - slots.mes: número do mês (1-12) quando ela citar SÓ o mês, sem o dia (ex.: "penso em outubro" -> 10). Deixe null se já deu dia e mês juntos (use mesDia).
 - slots.dia: número do dia do mês (1-31) quando ela citar SÓ o dia, sem o mês. Em especial, se já perguntamos a DATA e a mensagem é só um número (ex.: "30", "dia 12"), é o dia do evento -> slots.dia. Deixe null se não for um dia de evento.
-- slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data). Aceite dois dígitos: "28" -> 2028, "27" -> 2027. Aceite também expressão relativa em vez do número: "ano que vem", "o próximo ano", "ano seguinte", "esse ano" -> 2027 (o espaço só fecha para 2027 ou 2028, nunca para o ano corrente).
+- slots.ano: 2027 ou 2028, se citado (inclusive dentro de uma data). Aceite dois dígitos: "28" -> 2028, "27" -> 2027. Aceite também expressão relativa em vez do número: "ano que vem", "o próximo ano", "ano seguinte", "esse ano", "daqui a 1 ano" -> 2027 (o espaço só fecha para 2027 ou 2028, nunca para o ano corrente). Para "daqui a 2 anos"/"em 2 anos": esse é o ano 2028, NÃO confunda com "ano que vem" (que é 1 ano à frente, 2027) — conte quantos anos à frente foram ditos.
 - slots.diaSemana: o dia da semana exato, se citado (ex.: "sábado" -> sabado, sem acento).
 - slots.preferenciaDia: "fim_de_semana" (sábado/domingo) ou "dia_de_semana" (segunda a sexta),
   quando a pessoa fala de forma genérica sem citar o dia exato.
-- slots.convidados: número estimado de convidados, SÓ quando o número se refere claramente a pessoas ("150 convidados", "somos uns 200", "200 pessoas"). Um número solto logo depois de perguntarmos a DATA é o dia do evento (slots.dia), NÃO convidados. Nunca reinterprete um número como convidados se "Dados já coletados" já traz convidados e a mensagem não fala de pessoas.
+- slots.convidados: número estimado de convidados, SÓ quando o número se refere claramente a pessoas ("150 convidados", "somos uns 200", "200 pessoas"). Um número solto logo depois de perguntarmos a DATA é o dia do evento (slots.dia), NÃO convidados. Nunca reinterprete um número como convidados se "Dados já coletados" já traz convidados e a mensagem não fala de pessoas. Deixe null se o número for 0, negativo, ou um exagero óbvio de brincadeira/teste (ex.: "99999999", "um trilhão de pessoas") — não é uma resposta real de convidados.
 - intencao:
   - "cliente_fechado": dá a entender que JÁ contratou/fechou o casamento.
   - "agendar_visita": a noiva/cliente quer conhecer o espaço (visita normal).
   - "visita_tecnica": é um FORNECEDOR (buffet, decorador, assessoria) de um casamento JÁ FECHADO nesse espaço querendo fazer a VISITA TÉCNICA em si. Use só quando a pessoa fala explicitamente em "visita técnica" para um evento que vai acontecer aqui.
-  - "fornecedor": a pessoa NÃO é noiva buscando orçamento — é fornecedor, parceria comercial, imprensa, candidato a vaga ou similar, geralmente com dúvidas para tirar (ex.: "sou fornecedor, preciso tirar dúvidas", "trabalho com decoração e queria conversar", "sou de uma empresa e queria uma parceria"). Precisa de atendimento humano. Não confunda com "visita_tecnica".
+  - "fornecedor": a pessoa NÃO é noiva buscando orçamento — é fornecedor, parceria comercial, imprensa, candidato a vaga ou similar, geralmente com dúvidas para tirar (ex.: "sou fornecedor, preciso tirar dúvidas", "trabalho com decoração e queria conversar", "sou de uma empresa e queria uma parceria"). Precisa de atendimento humano. Não confunda com "visita_tecnica". IMPORTANTE: se a pessoa disser em QUALQUER parte da mensagem que é fornecedora/prestadora de serviço (buffet, decoração, fotografia, assessoria etc.), a intenção é SEMPRE "fornecedor" — mesmo que a mesma mensagem também mencione "orçamento", data ou nº de convidados (ela pode estar perguntando sobre orçamento/parceria comercial, não sobre um casamento dela). Nunca deixe menção a dado de evento nessa mensagem mudar a classificação pra "seguir_fluxo".
   - "negociar": quer desconto, parcelamento ou mudar condição de valor.
   - "despedida": está encerrando o assunto ou se despedindo, sem pedir mais nada ("obrigada, era só isso", "por enquanto é isso", "depois eu vejo", "vou pensar e te aviso", "tchau", "valeu"). Diferente de uma dúvida nova.
   - "fora_do_script": uma PERGUNTA concreta que foge do atendimento padrão (ex.: "tem buffet?", "tem estacionamento?", "qual o endereço?", "aceita pet?"). NÃO use para saudações, agradecimentos, nem quando a pessoa só diz que vai responder, pede um minuto ou manda uma mensagem social — isso é "seguir_fluxo".
