@@ -21,5 +21,13 @@ export const PDF_CATALOGO: Record<TipoPdf, { arquivo: string; descricao: string 
 };
 
 export function pdfPropostaPorAno(ano: Ano): TipoPdf {
+  // Defesa em profundidade: o tipo `Ano` (2027|2028) e o Zod na extração já
+  // impedem isso na prática, mas mandar PDF/preço errado em silêncio (o que o
+  // ternário original fazia pra qualquer valor != 2027) é pior que travar o
+  // turno — `processarFila` já captura qualquer exceção sem derrubar o resto
+  // do lote nem deixar a cliente sem resposta (vai pra handoff avisada).
+  if (ano !== 2027 && ano !== 2028) {
+    throw new Error(`pdfPropostaPorAno: ano inválido (${String(ano)}); só 2027 ou 2028 são vendáveis`);
+  }
   return ano === 2027 ? 'proposta_2027' : 'proposta_2028';
 }
