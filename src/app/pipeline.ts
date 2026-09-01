@@ -13,6 +13,13 @@ export function adiarISO(agoraISO: string, segundos: number): string {
   return new Date(new Date(agoraISO).getTime() + segundos * 1000).toISOString();
 }
 
+// Cap de tamanho por mensagem: nenhuma conversa real de orçamento precisa de
+// mais que isso. Sem cap, uma mensagem de texto gigante (ou um áudio muito
+// longo transcrito) multiplica o custo de tokens da chamada ao Gemini dentro
+// do próprio limite de CONTAGEM de mensagens (ADR-0009) — o rate limit por
+// contagem não protege contra tamanho.
+const MAX_CARACTERES_MENSAGEM = 4000;
+
 /**
  * Lê um número de env var com fallback seguro. `??` só cobre undefined/null —
  * `RATE_LIMIT_MAX_MENSAGENS=""` (var criada mas vazia) virava `Number('')` = 0,
@@ -64,7 +71,10 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
     if (await deps.eventos.jaVisto(msg.messageId)) continue;
     await deps.eventos.marcar(msg.messageId);
 
-    const conteudo = msg.tipo === 'audio' ? (msg.mediaId ?? '') : (msg.texto ?? '');
+    const conteudo =
+      msg.tipo === 'audio'
+        ? (msg.mediaId ?? '')
+        : (msg.texto ?? '').slice(0, MAX_CARACTERES_MENSAGEM);
     if (!conteudo) continue;
 
     const desdeISO = adiarISO(deps.agora(), -janelaSegundos);
@@ -93,15 +103,20 @@ export interface ProcessDeps {
 }
 
 /**
- * Transcrição do áudio falhou (Gemini indisponível, rate limit, formato etc.): sem
- * isso, o item era marcado como processado e a mensagem sumia sem resposta nem
- * aviso para a Raquel. Avisa a noiva (pede texto) e dispara handoff. Best-effort:
- * uma falha aqui não pode derrubar o resto da fila.
+ * Avisa a noiva e dispara handoff. Usado tanto quando a transcrição falha
+ * quanto (rede de segurança) quando qualquer outra etapa do turno lança uma
+ * exceção inesperada: sem isso, o item era marcado como processado e a
+ * mensagem sumia sem resposta nem aviso para a Raquel. Best-effort: uma falha
+ * aqui não pode derrubar o resto da fila.
  */
-async function avisarFalhaTranscricao(deps: Deps, telefone: string): Promise<void> {
+async function avisarEHandoff(
+  deps: Deps,
+  telefone: string,
+  motivo: string,
+  mensagemCliente: string,
+): Promise<void> {
   try {
     const conversa = (await deps.conversas.obter(telefone)) ?? novaConversa(telefone, deps.agora());
-    const motivo = 'áudio recebido, mas a transcrição falhou';
     const atualizada: Conversa = {
       ...conversa,
       estado: 'handoff',
@@ -109,7 +124,7 @@ async function avisarFalhaTranscricao(deps: Deps, telefone: string): Promise<voi
       atualizadoEm: deps.agora(),
     };
     await deps.conversas.salvar(atualizada);
-    await deps.messaging.enviar(telefone, [{ tipo: 'texto', texto: MSG.audioNaoEntendido }]);
+    await deps.messaging.enviar(telefone, [{ tipo: 'texto', texto: mensagemCliente }]);
     await deps.notifier.alertarHandoff(atualizada, motivo);
   } catch {
     // Nada mais a fazer: o item já será marcado como processado no finally do
@@ -161,7 +176,7 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
           if (item.tipo === 'audio') {
             try {
               const texto = await deps.transcriber.transcrever(item.conteudo);
-              if (texto) partes.push(texto);
+              if (texto) partes.push(texto.slice(0, MAX_CARACTERES_MENSAGEM));
             } catch {
               falhaAudio = true;
             }
@@ -173,7 +188,12 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
         if (falhaAudio) {
           // Não segue para o NLU com contexto incompleto: a conversa já vai para
           // handoff, e o orquestrador ignoraria a mensagem mesmo (estado 'handoff').
-          await avisarFalhaTranscricao(deps.orquestrador, telefone);
+          await avisarEHandoff(
+            deps.orquestrador,
+            telefone,
+            'áudio recebido, mas a transcrição falhou',
+            MSG.audioNaoEntendido,
+          );
         } else {
           const mensagem = partes.join('\n');
           if (mensagem) {
@@ -185,6 +205,23 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
           }
         }
       }
+    } catch (erro) {
+      // Rede de segurança do LOTE INTEIRO, não só desse telefone: `pegarVencidas`
+      // já reivindica atomicamente TODOS os itens do lote de uma vez (marca
+      // processado_em na hora de buscar, não depois de processar). Se uma
+      // exceção não tratada escapasse daqui, ela pararia o `for` e os grupos
+      // SEGUINTES do mesmo lote sumiriam pra sempre (já contam como
+      // processados, mas nunca teriam sido de fato atendidos). Por isso captura
+      // aqui, avisa o cliente e a Raquel, e deixa o loop seguir pro próximo
+      // telefone. console.error é a única observabilidade disponível hoje
+      // (aparece nos runtime logs da Vercel).
+      console.error(`processarFila: erro inesperado processando ${telefone}`, erro);
+      await avisarEHandoff(
+        deps.orquestrador,
+        telefone,
+        'erro inesperado no processamento',
+        MSG.erroInesperado,
+      );
     } finally {
       for (const item of grupo) await deps.fila.marcarProcessado(item.id);
     }

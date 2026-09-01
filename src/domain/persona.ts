@@ -128,11 +128,15 @@ export const MSG = {
 
   pedirDadosFaltantes: (faltando: string[], i = 0): string => {
     const o = faltando.join(' e ');
-    return [
+    const variantes = [
       `Só para fechar seu orçamento certinho, você pode me confirmar ${o}?`,
       `Perfeito! Para fechar seu orçamento, me confirma ${o}?`,
       `Legal! Só preciso saber ${o} para seguir com seu orçamento.`,
-    ][i % 3] as string;
+    ];
+    // Indexação blindada tipo `vary()`: `i % 3` cru quebraria com seed
+    // negativo/NaN (array[-1]/array[NaN] = undefined, mensagem sairia vazia).
+    const idx = ((i % variantes.length) + variantes.length) % variantes.length;
+    return variantes[idx] ?? variantes[0] ?? '';
   },
 
   dataIndisponivel: (data: string, alternativa: string): string =>
@@ -154,4 +158,11 @@ export const MSG = {
   audioNaoEntendido:
     'Recebi seu áudio, mas não consegui ouvir direito por aqui. ' +
     'Pode me mandar por texto? Já vou chamar a Raquel para dar uma olhada também. ☺️',
+
+  // Rede de segurança: qualquer erro inesperado no processamento do turno
+  // (não só transcrição). Mesmo tom: o que houve e o próximo passo, sem
+  // termo técnico e sem culpar a cliente.
+  erroInesperado:
+    'Tive um problema aqui pra processar sua mensagem. Já chamei a Raquel ' +
+    'pra te ajudar, ok? ☺️',
 } as const;

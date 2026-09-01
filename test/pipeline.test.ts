@@ -374,3 +374,41 @@ describe('ingerirWebhook — rate limit por telefone (ADR-0009)', () => {
     expect(b).toHaveLength(1); // 2 recentes < limite 3: enfileira
   });
 });
+
+describe('processarFila — erro inesperado num telefone não pode derrubar o resto do lote', () => {
+  it('telefones seguintes do mesmo lote continuam sendo processados mesmo se um telefone der erro', async () => {
+    // Regressão séria: `pegarVencidas` reivindica TODOS os itens do lote de uma
+    // vez (marca processado_em na hora de buscar). Se uma exceção escapasse do
+    // loop de um telefone, os telefones seguintes do MESMO lote sumiriam pra
+    // sempre — já contariam como processados, mas nunca teriam sido atendidos.
+    const { fila, processados } = filaCom([
+      item('1', '5511111', 'mensagem que aciona o bug'),
+      item('2', '5522222', 'oi, tudo bem'),
+    ]);
+    const nluQuebrado: NLU = {
+      async analisar(_texto, conversa) {
+        if (conversa.telefone === '5511111') throw new Error('bug simulado');
+        return { slots: {}, intencao: 'seguir_fluxo' };
+      },
+    };
+    const messaging = new SandboxProvider();
+    const notifier = new RecordingNotifier();
+    const deps: Deps = { ...orquestrador(nluQuebrado), messaging, notifier };
+
+    const turnos = await processarFila({ fila, transcriber: transcriberNoop, orquestrador: deps });
+
+    expect(turnos).toBe(2);
+    expect(processados).toEqual(['1', '2']); // nenhum item fica preso
+    // telefone que quebrou: avisado e mandado pra handoff, não fica mudo
+    expect(messaging.enviadas.find((e) => e.telefone === '5511111')?.saidas[0]?.texto).toBe(
+      MSG.erroInesperado,
+    );
+    expect(
+      notifier.alertas.some(
+        (a) => a.telefone === '5511111' && a.motivo === 'erro inesperado no processamento',
+      ),
+    ).toBe(true);
+    // telefone seguinte no mesmo lote: processado normalmente, não foi arrastado
+    expect(messaging.enviadas.some((e) => e.telefone === '5522222')).toBe(true);
+  });
+});
