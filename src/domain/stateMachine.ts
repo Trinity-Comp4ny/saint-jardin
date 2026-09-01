@@ -161,10 +161,32 @@ export function anoEfetivo(slots: Slots): Ano | undefined {
   return undefined;
 }
 
-/** Data ISO completa: a data explícita, ou dia/mês combinado com o ano já sabido. */
+/**
+ * Confirma que ano/mês/dia formam uma data de calendário real — rejeita "30
+ * de fevereiro" etc. O `new Date(ano, mes, dia)` do JS "rola" datas inválidas
+ * pro mês seguinte em vez de reclamar (30/02 vira 02/03); comparar os campos
+ * de volta detecta esse rollover.
+ */
+function dataDeCalendarioValida(iso: string): boolean {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  if (!y || !m || !d) return false;
+  const data = new Date(y, m - 1, d);
+  return data.getFullYear() === y && data.getMonth() === m - 1 && data.getDate() === d;
+}
+
+/**
+ * Data ISO completa: a data explícita, ou dia/mês combinado com o ano já
+ * sabido. Uma data que não existe no calendário (dia/mês vindos de mensagens
+ * separadas podem combinar em algo impossível, tipo dia 30 + fevereiro)
+ * degrada pra "sem data completa" — o fluxo segue com o ano que já tem, em
+ * vez de checar disponibilidade pra uma data inventada sem avisar ninguém.
+ */
 export function dataCompleta(slots: Slots): string | undefined {
-  if (slots.data) return slots.data;
-  if (slots.mesDia && slots.ano) return `${slots.ano}-${slots.mesDia}`;
+  if (slots.data) return dataDeCalendarioValida(slots.data) ? slots.data : undefined;
+  if (slots.mesDia && slots.ano) {
+    const iso = `${slots.ano}-${slots.mesDia}`;
+    return dataDeCalendarioValida(iso) ? iso : undefined;
+  }
   return undefined;
 }
 

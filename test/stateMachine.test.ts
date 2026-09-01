@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   classificarDia,
+  dataCompleta,
   decidir,
   ehMiniWedding,
   novaConversa,
@@ -148,6 +149,25 @@ describe('fluxo feliz - evento normal', () => {
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
+  });
+
+  it('regressão: "30 de fevereiro" (data impossível) não trava — segue com o ano, sem checar disponibilidade inventada', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 200 }),
+      nlu({ slots: { data: '2028-02-30' } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
+  });
+
+  it('dataCompleta rejeita data de calendário inexistente (unitário)', () => {
+    expect(dataCompleta({ data: '2028-02-30' })).toBeUndefined();
+    expect(dataCompleta({ mesDia: '02-30', ano: 2028 })).toBeUndefined();
+    expect(dataCompleta({ mesDia: '13-01', ano: 2028 })).toBeUndefined(); // mês 13
+    expect(dataCompleta({ data: '2028-05-16' })).toBe('2028-05-16'); // controle: data real
+    expect(dataCompleta({ data: '2028-02-29' })).toBe('2028-02-29'); // 2028 é bissexto: válido
+    expect(dataCompleta({ data: '2027-02-29' })).toBeUndefined(); // 2027 não é bissexto: inválido
   });
 
   it('monta a data quando junta dia/mês já dado com o ano informado depois', () => {
