@@ -508,11 +508,20 @@ describe('handoff', () => {
     expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
   });
 
-  it('sem sinal claro na proposta, encerra cordialmente (não re-convida em loop)', () => {
-    const r = decidir(conversaEm('proposta_enviada'), nlu(), ctx);
-    expect(r.conversa.estado).toBe('encerrada');
-    // Não repete o convite ("agendar um dia"): fica à disposição, sem pergunta de convite.
-    expect(r.saidas[0]?.texto).not.toMatch(/agendar um dia/i);
+  it('regressão: sem sinal claro na proposta (ex.: correção de nome) NÃO encerra sozinho nem re-convida', () => {
+    // Era um fallback incondicional: QUALQUER mensagem sem sim/dado novo/
+    // agendar_visita fechava a conversa, mesmo sem recusa nenhuma — ex.: "ah
+    // desculpa, é Beatriz meu nome, não Ana" fechava a conversa e ela ficava
+    // muda. Despedida de verdade já é pega pelo guard do topo de `decidir`;
+    // aqui, sem sinal claro, o certo é ficar quieta, não fechar.
+    const r = decidir(
+      conversaEm('proposta_enviada', { diaSemana: 'sabado', convidados: 150, ano: 2027 }),
+      nlu({ nomeDetectado: 'Beatriz' }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas).toHaveLength(0);
+    expect(r.conversa.slots.nome).toBe('Beatriz'); // a correção de nome não se perde
   });
 
   it('cliente já fechado transborda já no primeiro contato', () => {

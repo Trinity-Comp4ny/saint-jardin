@@ -525,9 +525,18 @@ export function decidir(
           saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
         };
       }
-      // Recusou a visita: agradece UMA vez e encerra. É o fim do loop do print
-      // (antes o bot re-perguntava o convite a cada "não").
-      return encerrar();
+      // Recusou a visita de propósito: agradece UMA vez e encerra. É o fim do
+      // loop do print (antes o bot re-perguntava o convite a cada "não").
+      if (nlu.negativo) {
+        return encerrar();
+      }
+      // Regressão: isso ERA um fallback incondicional (fechava a conversa pra
+      // QUALQUER coisa que não fosse sim/dado novo/agendar_visita — inclusive
+      // uma simples correção de nome, "kkk", ou comentário solto). Despedida de
+      // verdade já é pega pelo guard do topo de `decidir`; aqui, sem sinal
+      // claro, o certo é não fechar a conversa sozinha nem insistir de novo no
+      // convite de visita — fica quieta, ela segue de onde parou no próximo dado.
+      return { conversa: base, saidas: [] };
 
     case 'aguardando_pref_visita': {
       // Desistiu da visita ("não", "deixa pra depois"): encerra sem repassar.
