@@ -295,6 +295,7 @@ function prefVisitaTexto(nlu: EntradaNLU): string {
 function fluxoVisitaTecnica(
   base: Conversa,
   slots: Slots,
+  nlu: EntradaNLU,
   ctx: ContextoDecisao,
 ): ResultadoDecisao {
   const dataISO = resolverDataTecnica(slots, ctx.agora);
@@ -311,13 +312,22 @@ function fluxoVisitaTecnica(
       saidas: [texto(MSG.visitaTecnicaForaRegra(validacao.motivo))],
     };
   }
+  // Uma vez no estado 'visita_tecnica_data', QUALQUER mensagem é tratada como
+  // sendo sobre a visita técnica — mesmo que ela também traga um pedido novo,
+  // tipo orçamento pro próprio casamento na mesma mensagem. `convidados` é o
+  // sinal mais confiável disso: uma visita técnica nunca precisa desse dado,
+  // só faz sentido se ela também estiver pedindo orçamento junto. Não tenta
+  // separar os dois assuntos aqui (isso é decisão de negócio) — só avisa a
+  // Raquel pra ela não se confundir e resolver com a cliente.
+  const tambemPediuOrcamento = nlu.slots.convidados !== undefined;
+  const motivo =
+    `visita técnica: ${descreverData(dataISO)}` +
+    (tambemPediuOrcamento
+      ? ' — atenção: mensagem também menciona nº de convidados, pode ser pedido de orçamento próprio junto'
+      : '');
   // Dentro da regra: avisa que vai verificar e repassa para a Raquel confirmar.
   return {
-    conversa: {
-      ...base,
-      estado: 'handoff',
-      motivoHandoff: `visita técnica: ${descreverData(dataISO)}`,
-    },
+    conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
     saidas: [pergunta(MSG.visitaTecnicaVouVerificar)],
   };
 }
@@ -403,7 +413,7 @@ export function decidir(
 
   // Visita técnica tem fluxo próprio (valida e repassa), em qualquer estado.
   if (nlu.intencao === 'visita_tecnica' || conversa.estado === 'visita_tecnica_data') {
-    return fluxoVisitaTecnica(base, slots, ctx);
+    return fluxoVisitaTecnica(base, slots, nlu, ctx);
   }
 
   // Despedida em qualquer ponto (menos no meio de coletar dados que ela acabou de

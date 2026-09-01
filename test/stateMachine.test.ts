@@ -464,6 +464,26 @@ describe('visita técnica (valida e repassa)', () => {
     expect(r.conversa.estado).toBe('handoff');
     expect(r.conversa.motivoHandoff).toMatch(/visita técnica/);
   });
+
+  it('avisa a Raquel quando a mesma mensagem também traz convidados (pode ser pedido de orçamento próprio junto)', () => {
+    const r = decidir(
+      conversaEm('visita_tecnica_data'),
+      nlu({ slots: { data: '2026-08-25', convidados: 200 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.conversa.motivoHandoff).toMatch(/visita técnica/);
+    expect(r.conversa.motivoHandoff).toMatch(/convidados/);
+  });
+
+  it('não avisa quando é só a data da visita técnica, sem convidados junto (sem alarme falso)', () => {
+    const r = decidir(
+      conversaEm('visita_tecnica_data'),
+      nlu({ slots: { data: '2026-08-25' } }),
+      ctx,
+    );
+    expect(r.conversa.motivoHandoff).not.toMatch(/convidados/);
+  });
 });
 
 describe('data no passado', () => {
