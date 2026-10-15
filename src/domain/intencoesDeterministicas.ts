@@ -4,6 +4,7 @@
 // (cliente fechada, evento que não é casamento, problema com o PDF).
 
 import type { EntradaNLU, EstadoConversa, PreferenciaVisita, Slots } from './types';
+import { ehSaudacaoPura } from './texto';
 import { diaDaSemanaNoTexto, horaNoTexto, rotuloDiaSemana } from './visita';
 
 const ESTADOS_COMERCIAIS: EstadoConversa[] = ['novo', 'aguardando_assunto', 'aguardando_qualificacao'];
@@ -31,6 +32,12 @@ const RE_PRECO = new RegExp(
   `${L}(valor(es)?|pre[çc]os?|quanto (custa|[ée]|fica|sai|cobram)|or[çc]amento|or[çc]ar|cota[çc][ãa]o|cotar|tabela)${R}`,
 );
 
+// Despedida cordial depois da proposta: "obrigada, vou olhar com calma", "depois eu volto".
+// O modelo oscila entre despedida e "seguir_fluxo" para a mesma frase.
+const RE_DESPEDIDA = new RegExp(
+  `${L}(vou (olhar|analisar|ver|pensar)( isso)? com calma|obrigad[oa][^?]*(vou (olhar|ver|pensar|analisar)|depois (eu )?(volto|falo|retorno|vejo))|qualquer coisa (eu )?(te )?(chamo|falo|aviso|retorno)|depois (eu )?(te )?(falo|aviso|retorno|volto))${R}`,
+);
+
 // "não consegui abrir o pdf", "o vídeo não carrega", "manda o valor aqui no texto".
 const RE_PROBLEMA_ARQUIVO = new RegExp(
   `${L}(n[ãa]o (consegui|consigo|abre|abriu|chegou|carrega|carregou|baixou|baixa)|(pdf|arquivo|v[ií]deo|anexo)[^.?!]{0,40}(n[ãa]o|erro|problema|corrompid)|(manda|mande|envia|envie|passa|passe)r? (o )?(valor|valores|pre[çc]o)s? (aqui|no texto|por texto|em texto|escrito)|(valor|valores|pre[çc]os?) (aqui )?(no|em|por) texto)`,
@@ -45,6 +52,20 @@ const RE_VISITA_TECNICA = /visita\s+t[ée]cnica/;
 // resposta à pergunta de data, não uma dúvida fora do roteiro. O bot pede 2027 ou 2028.
 const RE_ANO_QUALQUER = /(?<!\d)20[2-4]\d(?!\d)/;
 
+// 2029 em diante: a agenda ainda não abriu. 2029 abre em janeiro de 2027 (texto da Raquel).
+const RE_ANO_FUTURO = /(?<!\d)(20[2-4]\d)(?!\d)/g;
+const RE_ANO_VENDAVEL = /(?<!\d)202[78](?!\d)/;
+
+/** Primeiro ano de 2029 a 2049 citado, se o texto não cita também 2027 ou 2028. */
+function anoAindaFechado(texto: string): number | undefined {
+  if (RE_ANO_VENDAVEL.test(texto)) return undefined;
+  for (const m of texto.matchAll(RE_ANO_FUTURO)) {
+    const ano = Number(m[1]);
+    if (ano >= 2029) return ano;
+  }
+  return undefined;
+}
+
 /** Corrige a leitura do modelo com o que o texto diz de forma inequívoca. */
 export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: EntradaNLU): EntradaNLU {
   if (ESTADOS_DE_VISITA.includes(estado)) {
@@ -53,7 +74,19 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
   const t = texto.toLowerCase();
   const e: EntradaNLU = { ...entrada };
   const comercial = ESTADOS_COMERCIAIS.includes(estado);
+  // Pergunta de preço na oferta do mini também é pedir informação (o PDF do mini responde).
+  const falaDePreco = comercial || estado === 'aguardando_interesse_mini';
   const naoCasamento = RE_NAO_CASAMENTO.test(t) && !RE_CASAMENTO.test(t);
+
+  // Só um cumprimento ("tudo bem?") enquanto o bot espera o assunto não inicia o fluxo: o modelo
+  // às vezes lê "tudo bem?" como pedido e o bot mandava abertura e vídeo para quem só cumprimentou.
+  if (
+    (estado === 'novo' || estado === 'aguardando_assunto') &&
+    e.intencao === 'seguir_fluxo' &&
+    ehSaudacaoPura(t)
+  ) {
+    e.intencao = 'saudacao';
+  }
 
   if (RE_INDECISO.test(t) && !e.afirmativo) e.indeciso = true;
 
@@ -61,6 +94,16 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
     e.intencao = 'visita_tecnica';
   }
   if (e.intencao === 'visita_tecnica') return separarDatasDaVisitaTecnica(texto, e);
+
+  // Ano que ainda não vendemos. 2029: o bot avisa e usa 2028 como base (ver `anoIndisponivel` na
+  // máquina de estados). 2030 em diante: a Raquel não definiu, então vai para ela, em silêncio.
+  const anoFechado = anoAindaFechado(t);
+  if (anoFechado === 2029) {
+    e.anoIndisponivel = 2029;
+    if (e.intencao === 'fora_do_script') e.intencao = 'seguir_fluxo';
+  } else if (anoFechado !== undefined && ['seguir_fluxo', 'agendar_visita'].includes(e.intencao)) {
+    e.intencao = 'fora_do_script';
+  }
   if (
     comercial &&
     e.intencao === 'fora_do_script' &&
@@ -75,12 +118,17 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
   } else if (comercial && naoCasamento && ['seguir_fluxo', 'agendar_visita'].includes(e.intencao)) {
     // Evento corporativo, aniversário etc.: o fluxo e o vídeo são de casamento.
     e.intencao = 'fora_do_script';
-  } else if (comercial && e.intencao === 'fora_do_script' && !naoCasamento && RE_PRECO.test(t)) {
+  } else if (falaDePreco && e.intencao === 'fora_do_script' && !naoCasamento && RE_PRECO.test(t)) {
     // Perguntar valor/preço é pedir orçamento, não uma dúvida fora do script.
     e.intencao = 'seguir_fluxo';
   } else if (RE_PROBLEMA_ARQUIVO.test(t) && e.intencao === 'seguir_fluxo') {
     // Problema com o PDF/vídeo ou pedido de valor por texto: precisa de gente, não de silêncio.
     e.intencao = 'fora_do_script';
+  }
+  // Só depois da proposta: na oferta do mini "vou ver com meu noivo" é indecisão (recebe o PDF),
+  // não despedida.
+  if (estado === 'proposta_enviada' && e.intencao === 'seguir_fluxo' && RE_DESPEDIDA.test(t) && !t.includes('?')) {
+    e.intencao = 'despedida';
   }
   return e;
 }

@@ -65,6 +65,14 @@ export const MSG = {
     return `${base} Se ainda não decidiu o dia, me diz só o ano (2027 ou 2028) que já sigo com o orçamento.`;
   },
 
+  // A pessoa pediu 2029. Orientação da Raquel (15/10/2026): dizer que a agenda de 2029 abre em
+  // janeiro de 2027 e mandar os valores de 2028 como base, para ela poder marcar uma visita
+  // (é na visita que se negocia). O bot segue o fluxo normal com 2028, que manda o PDF.
+  agenda2029:
+    'Vamos abrir a agenda de 2029 em janeiro de 2027, mas já posso te enviar os valores de ' +
+    '2028 para você ter uma base e poder marcar uma visita. Aí a gente conversa sobre as ' +
+    'condições! ☺️',
+
   // Proposta normal: a mensagem de ano (literal da Raquel) antecede o PDF do ano.
   // A descrição de inclusos saiu: vive dentro do PDF.
   propostaAno: (ano: number): string =>

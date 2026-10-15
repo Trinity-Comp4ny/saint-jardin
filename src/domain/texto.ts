@@ -38,3 +38,18 @@ export function sanitizarTextoCurto(bruto: string, max = 60): string | undefined
   const limpo = decodificarEntidades(bruto).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
   return limpo || undefined;
 }
+
+// Cumprimento puro: tirando as palavras de abertura e a pontuação, não sobra nada.
+const SAUDACAO =
+  'oi+e?|ol[áa]|opa|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|td bem|tudo bom|como vai|tudo certo';
+
+/** A mensagem é só um cumprimento ("oi", "bom dia", "tudo bem?"), sem pedido nem dado. */
+export function ehSaudacaoPura(t: string): boolean {
+  if (!new RegExp(`(?<![a-zà-ú])(${SAUDACAO})(?![a-zà-ú])`).test(t)) return false;
+  const resto = t
+    .replace(new RegExp(`(?<![a-zà-ú])(${SAUDACAO})(?![a-zà-ú])`, 'g'), ' ')
+    .replace(/[^a-zà-ú0-9]+/g, ' ')
+    .trim();
+  return resto === '';
+}
+

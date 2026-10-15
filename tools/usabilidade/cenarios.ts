@@ -58,6 +58,11 @@ export const CENARIOS: Cenario[] = [
   { id: 'B21', grupo: 'qualificação', titulo: 'corrige o dado no meio ("na verdade 2028")', pre: ['queria um orçamento'], turnos: ['2027, sábado, 100 pessoas', 'na verdade é 2028'] },
   { id: 'B22', grupo: 'qualificação', titulo: 'feriado de semana (7/9/2027, terça), 40 pessoas', pre: ['queria um orçamento'], turnos: ['7 de setembro de 2027, 40 pessoas'] },
 
+  { id: 'B23', grupo: 'qualificação', titulo: '2030 (agenda ainda fechada, sem orientação)', pre: ['queria um orçamento'], turnos: ['2030, sábado, 100 pessoas'] },
+  { id: 'B24', grupo: 'qualificação', titulo: '2029, dia de semana, 50 pessoas (aviso e oferta do mini)', pre: ['queria um orçamento'], turnos: ['2029, quarta-feira, 50 pessoas'] },
+  { id: 'B25', grupo: 'qualificação', titulo: '2029 pedido no primeiro contato', turnos: ['Oi, queria orçar um casamento para 2029'] },
+  { id: 'B26', grupo: 'qualificação', titulo: '2029 um dado por vez', pre: ['queria um orçamento'], turnos: ['2029', 'sábado', 'umas 120 pessoas'] },
+
   // ---------- Mini wedding ----------
   { id: 'C01', grupo: 'mini wedding', titulo: 'aceita o mini (sim)', pre: ['queria um orçamento'], turnos: ['quarta-feira, 50 convidados, 2028', 'sim, pode mandar'] },
   { id: 'C02', grupo: 'mini wedding', titulo: 'recusa o mini e aceita as tradicionais', pre: ['queria um orçamento'], turnos: ['quarta-feira, 50 convidados, 2028', 'não', 'pode sim'] },
@@ -93,6 +98,8 @@ export const CENARIOS: Cenario[] = [
   { id: 'D18', grupo: 'após a proposta', titulo: 'depois do follow-up, "sim"', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028', '@followup'], turnos: ['sim, quero marcar'] },
   { id: 'D19', grupo: 'após a proposta', titulo: 'depois do follow-up, "não"', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028', '@followup'], turnos: ['por enquanto não'] },
   { id: 'D20', grupo: 'após a proposta', titulo: 'depois do follow-up, pergunta', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028', '@followup'], turnos: ['qual o horário de visita no sábado?'] },
+  { id: 'D22', grupo: 'após a proposta', titulo: '"e para 2029?" depois da proposta de 2028', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['e para 2029?'] },
+  { id: 'D23', grupo: 'após a proposta', titulo: 'pede 2029 e depois 2029 de novo (aviso uma vez só)', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['e para 2029?', 'então 2029 mesmo, tem como?'] },
   { id: 'D21', grupo: 'após a proposta', titulo: 'depois do follow-up, "ok"', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028', '@followup'], turnos: ['ok'] },
 
   // ---------- Visita técnica ----------

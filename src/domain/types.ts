@@ -80,6 +80,11 @@ export interface Slots {
   casamentoNoivos?: string;
   /** O que ele presta ("buffet", "decoração", "fotografia"). */
   fornecedorServico?: string;
+  /**
+   * Controle interno (NUNCA vem da NLU): a pessoa pediu um ano que ainda não vendemos (2029) e o
+   * bot já avisou e usou 2028 como base. Evita repetir o aviso e mostra à Raquel o ano pedido.
+   */
+  anoSolicitado?: number;
 }
 
 export type EstadoConversa =
@@ -180,6 +185,11 @@ export interface EntradaNLU {
    * indeciso recebe o PDF, quem recusa recebe a pergunta das propostas tradicionais.
    */
   indeciso?: boolean;
+  /**
+   * A pessoa pediu um ano que a agenda ainda não abriu (hoje 2029). Detectado por regra, não pelo
+   * modelo: o schema de `slots.ano` só aceita 2027 e 2028 e descartava o resto em silêncio.
+   */
+  anoIndisponivel?: number;
   /**
    * Visita técnica: o casamento que o fornecedor atende (data, noivos e o serviço dele).
    * Separado de `slots`, onde ficam só os dados de orçamento e a data da PRÓPRIA visita.

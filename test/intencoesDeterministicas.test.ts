@@ -206,3 +206,59 @@ describe('ajustarEntrada: visita técnica e anos que o bot não vende', () => {
     expect(e.intencao).toBe('fora_do_script');
   });
 });
+
+describe('ajustarEntrada: despedida depois da proposta e preço na oferta do mini', () => {
+  it.each([
+    'obrigada, vou olhar com calma',
+    'obrigado! depois eu volto',
+    'vou analisar com calma e te falo',
+    'qualquer coisa eu te chamo',
+  ])('"%s" depois da proposta é despedida', (texto) => {
+    expect(ajustarEntrada(texto, 'proposta_enviada', entrada('seguir_fluxo')).intencao).toBe('despedida');
+  });
+
+  it('uma pergunta junto não é despedida', () => {
+    expect(ajustarEntrada('obrigada, vou olhar. Tem desconto?', 'proposta_enviada', entrada('seguir_fluxo')).intencao).toBe(
+      'seguir_fluxo',
+    );
+    expect(ajustarEntrada('obrigada! vou olhar com calma, posso levar meu buffet?', 'proposta_enviada', entrada('seguir_fluxo')).intencao).toBe(
+      'seguir_fluxo',
+    );
+  });
+
+  it('na oferta do mini, "vou ver com meu noivo" continua indecisão (recebe o PDF), não despedida', () => {
+    const e = ajustarEntrada('obrigada, vou ver com meu noivo', 'aguardando_interesse_mini', entrada('seguir_fluxo'));
+    expect(e.intencao).toBe('seguir_fluxo');
+    expect(e.indeciso).toBe(true);
+  });
+
+  it('"quanto é?" na oferta do mini é pedido de informação, não pergunta fora do roteiro', () => {
+    expect(ajustarEntrada('quanto é?', 'aguardando_interesse_mini', entrada('fora_do_script')).intencao).toBe('seguir_fluxo');
+    expect(ajustarEntrada('qual o valor desse pacote?', 'aguardando_interesse_mini', entrada('fora_do_script')).intencao).toBe('seguir_fluxo');
+  });
+
+  it('"tem hospedagem?" na oferta do mini continua indo para a Raquel (com o PDF)', () => {
+    expect(ajustarEntrada('tem hospedagem?', 'aguardando_interesse_mini', entrada('fora_do_script')).intencao).toBe('fora_do_script');
+  });
+});
+
+describe('ajustarEntrada: cumprimento puro não inicia o fluxo', () => {
+  it.each(['tudo bem?', 'Oi, tudo bem?', 'bom dia!', 'olá', 'e aí, tudo certo?'])(
+    '"%s" enquanto o bot espera o assunto vira saudação mesmo se o modelo disse seguir_fluxo',
+    (texto) => {
+      expect(ajustarEntrada(texto, 'aguardando_assunto', entrada('seguir_fluxo')).intencao).toBe('saudacao');
+      expect(ajustarEntrada(texto, 'novo', entrada('seguir_fluxo')).intencao).toBe('saudacao');
+    },
+  );
+
+  it.each(['oi, queria um orçamento', 'tudo bem? queria saber os valores', 'bom dia, quero conhecer o espaço'])(
+    '"%s" é pedido de verdade e segue o fluxo',
+    (texto) => {
+      expect(ajustarEntrada(texto, 'aguardando_assunto', entrada('seguir_fluxo')).intencao).toBe('seguir_fluxo');
+    },
+  );
+
+  it('depois da proposta um "tudo bem?" não é reclassificado', () => {
+    expect(ajustarEntrada('tudo bem?', 'proposta_enviada', entrada('seguir_fluxo')).intencao).toBe('seguir_fluxo');
+  });
+});

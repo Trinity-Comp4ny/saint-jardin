@@ -208,6 +208,7 @@ export function mesclarSlots(atual: Slots, novo: Slots): Slots {
     dataCasamento: novo.dataCasamento ?? atual.dataCasamento,
     casamentoNoivos: novo.casamentoNoivos ?? atual.casamentoNoivos,
     fornecedorServico: novo.fornecedorServico ?? atual.fornecedorServico,
+    anoSolicitado: novo.anoSolicitado ?? atual.anoSolicitado,
   };
 }
 
@@ -262,6 +263,8 @@ export function resumoEvento(slots: Slots): string {
         : undefined;
   if (dia) partes.push(dia);
   if (slots.convidados !== undefined) partes.push(`${slots.convidados} convidados`);
+  // Pediu um ano que a agenda ainda não abriu: a Raquel vê o que ela queria de fato.
+  if (slots.anoSolicitado !== undefined) partes.push(`pediu ${slots.anoSolicitado} (recebeu os valores de 2028)`);
   return partes.join(' · ');
 }
 
@@ -349,7 +352,7 @@ function temDadoDeOrcamento(slots: Slots): boolean {
 function trouxeDadoDiferente(atual: Slots, nlu: EntradaNLU): boolean {
   const novo = nlu.slots;
   return (Object.keys(novo) as (keyof Slots)[]).some(
-    (k) => k !== 'nome' && novo[k] !== undefined && novo[k] !== atual[k],
+    (k) => k !== 'nome' && k !== 'anoSolicitado' && novo[k] !== undefined && novo[k] !== atual[k],
   );
 }
 
@@ -668,6 +671,20 @@ function qualificar(
   return avancarComData(base, slots, nlu, ctx);
 }
 
+/** Coloca `aviso` depois da abertura (texto + vídeo), antes da primeira mensagem do fluxo. */
+function inserirAviso(saidas: MensagemSaida[], aviso: MensagemSaida): MensagemSaida[] {
+  let i = 0;
+  while (
+    i < saidas.length &&
+    (saidas[i]?.tipo === 'video' ||
+      saidas[i]?.texto === MSG.abertura ||
+      saidas[i]?.texto === MSG.aberturaSemSaudacao)
+  ) {
+    i++;
+  }
+  return [...saidas.slice(0, i), aviso, ...saidas.slice(i)];
+}
+
 export function decidir(
   conversa: Conversa,
   nlu: EntradaNLU,
@@ -676,6 +693,24 @@ export function decidir(
   // Conversa já assumida pela Raquel: o bot não age.
   if (conversa.estado === 'humano' || conversa.estado === 'handoff') {
     return { conversa, saidas: [] };
+  }
+
+  // Pediu 2029 (a agenda abre em janeiro de 2027). Orientação da Raquel: avisar e mandar os
+  // valores de 2028 como base para ela poder marcar uma visita. O resto do fluxo é o normal,
+  // só que com 2028: cobre cada estado (pergunta o que falta, oferta mini, proposta) sem
+  // duplicar regra. O aviso sai uma vez; depois só vai o que o fluxo mandaria.
+  if (nlu.anoIndisponivel !== undefined) {
+    const comBase: EntradaNLU = {
+      ...nlu,
+      anoIndisponivel: undefined,
+      slots: { ...nlu.slots, ano: 2028, anoSolicitado: nlu.anoIndisponivel },
+    };
+    const r = decidir(conversa, comBase, ctx);
+    if (r.conversa.estado === 'handoff' || r.conversa.estado === 'humano') return r;
+    const jaAvisou = conversa.slots.anoSolicitado !== undefined;
+    if (jaAvisou) return r;
+    const aviso = texto(MSG.agenda2029);
+    return { conversa: r.conversa, saidas: inserirAviso(r.saidas, aviso) };
   }
 
   const slots = mesclarSlots(conversa.slots, {
