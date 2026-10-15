@@ -10,3 +10,4 @@ coverage/
 
 # Cache local da CLI do Supabase
 supabase/.temp/
+tools/usabilidade/saida/

@@ -63,9 +63,9 @@ de ano que já existe (`avancarComData`).
 
 ## 4. Depois da proposta (`proposta_enviada`)
 
-- O bot não manda convite de visita junto da proposta.
-- Um "sim" ou "ok" **não** vale como aceite de visita até o follow-up 1 ter sido enviado. Antes disso,
-  só pedido explícito ("quero visitar", intenção `agendar_visita`).
+- O bot manda o convite de visita logo depois do PDF (texto da Raquel de 15/10/2026, ver ADR-0010).
+- "sim" ou "ok" depois da proposta aceita o convite de visita, que vem junto do PDF (a trava "só depois do
+  follow-up" saiu em 15/10/2026).
 - "ok", "obrigada": silêncio.
 - Pedido de visita ou "sim" depois do follow-up: "Realizamos visitas de segunda a sexta-feira, em
   horário comercial, e aos sábados, das 8h às 13h. Que dia ficará melhor para vocês?" (literal, não

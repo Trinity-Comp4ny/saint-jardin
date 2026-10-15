@@ -142,3 +142,97 @@ export function descreverData(dataISO: string): string {
   const mm = String(dt.getMonth() + 1).padStart(2, '0');
   return `${DOW_LABEL[dt.getDay()]} (${dd}/${mm}/${dt.getFullYear()})`;
 }
+
+// ---------------------------------------------------------------------------
+// Horário que o bot anuncia para visita de noiva (texto da Raquel, 14/10/2026):
+// "segunda a sexta, em horário comercial, e aos sábados, das 8h às 13h".
+// "Horário comercial" não foi definido: assumimos 8h às 18h (CONFIRMAR COM A RAQUEL).
+// Pedido fora disso não é recusado: o bot abre uma exceção a ser avaliada pela equipe.
+// ---------------------------------------------------------------------------
+
+const HORARIO_SEMANA = { inicio: 8, fim: 18 } as const;
+const HORARIO_SABADO = { inicio: 8, fim: 13 } as const;
+
+const NOMES_DIA: [RegExp, DiaSemana][] = [
+  [/(?<![a-zà-ú])s[áa]bado(?![a-zà-ú])/, 'sabado'],
+  [/(?<![a-zà-ú])domingo(?![a-zà-ú])/, 'domingo'],
+  [/(?<![a-zà-ú])segunda(-feira)?(?![a-zà-ú])/, 'segunda'],
+  [/(?<![a-zà-ú])ter[çc]a(-feira)?(?![a-zà-ú])/, 'terca'],
+  [/(?<![a-zà-ú])quarta(-feira)?(?![a-zà-ú])/, 'quarta'],
+  [/(?<![a-zà-ú])quinta(-feira)?(?![a-zà-ú])/, 'quinta'],
+  [/(?<![a-zà-ú])sexta(-feira)?(?![a-zà-ú])/, 'sexta'],
+];
+
+/** Rótulo para a noiva: "sábado", "segunda-feira"... */
+export function rotuloDiaSemana(d: DiaSemana): string {
+  return DOW_LABEL[DOW.indexOf(d)] ?? d;
+}
+
+/** Dia da semana citado pelo nome no texto (só se for um único). */
+export function diaDaSemanaNoTexto(texto: string): DiaSemana | undefined {
+  const t = texto.toLowerCase();
+  const achados = NOMES_DIA.filter(([re]) => re.test(t)).map(([, d]) => d);
+  return achados.length === 1 ? achados[0] : undefined;
+}
+
+/** Dia da semana de uma data "dd/mm" ou "dd/mm/aaaa" no texto (sem ano: a próxima ocorrência). */
+function diaDaSemanaDaData(texto: string, agoraISO: string): DiaSemana | undefined {
+  const m = texto.match(/(?<!\d)(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?!\d)/);
+  if (!m) return undefined;
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  if (dia < 1 || dia > 31 || mes < 1 || mes > 12) return undefined;
+  const agora = new Date(agoraISO);
+  let ano = m[3] ? Number(m[3]) : agora.getFullYear();
+  if (m[3] && ano < 100) ano += 2000;
+  let data = new Date(ano, mes - 1, dia);
+  if (!m[3] && data < new Date(agora.getFullYear(), agora.getMonth(), agora.getDate())) {
+    data = new Date(ano + 1, mes - 1, dia);
+  }
+  return DOW[data.getDay()];
+}
+
+/** Hora (0-23) citada no texto: "10h", "16:30", "às 9", "3 da tarde", "meio-dia". */
+export function horaNoTexto(texto: string): number | undefined {
+  const t = texto.toLowerCase();
+  if (/meio[- ]?dia/.test(t)) return 12;
+  const explicita = t.match(/(?<!\d)(\d{1,2})\s*(?:h|hs|horas?|:)\s*(\d{2})?(?!\d)/);
+  const solta = t.match(/(?:às|as|a partir das)\s*(\d{1,2})(?!\d|\/|:)/);
+  const crua = explicita?.[1] ?? solta?.[1];
+  if (crua === undefined) return undefined;
+  let h = Number(crua);
+  if (h > 23) return undefined;
+  if (/(da tarde|da noite)/.test(t) && h < 12) h += 12;
+  return h;
+}
+
+/**
+ * O pedido de visita cai fora do horário que o bot anunciou? Devolve como a noiva
+ * chamou o pedido ("domingo às 15h"), ou `undefined` se está dentro ou não dá para saber.
+ */
+export function visitaForaDoHorario(
+  v: PreferenciaVisita,
+  agoraISO: string,
+): { quando: string } | undefined {
+  const texto = v.dataHora ?? '';
+  const dia = v.diaSemana ?? diaDaSemanaNoTexto(texto) ?? diaDaSemanaDaData(texto, agoraISO);
+  let hora = texto ? horaNoTexto(texto) : undefined;
+  // Só o período ("de tarde", "de noite"): usa uma hora representativa dentro dele.
+  if (hora === undefined && v.periodo) hora = v.periodo === 'manha' ? 9 : 15;
+  if (/(da|de|à|a) noite|noitinha/.test(texto.toLowerCase())) hora ??= 19;
+
+  const quando =
+    v.dataHora ??
+    [dia ? DOW_LABEL[DOW.indexOf(dia)] : '', v.periodo === 'manha' ? 'de manhã' : v.periodo === 'tarde' ? 'de tarde' : '']
+      .filter(Boolean)
+      .join(' ');
+
+  if (dia === 'domingo') return { quando };
+  if (dia === 'sabado') {
+    if (hora !== undefined && (hora < HORARIO_SABADO.inicio || hora >= HORARIO_SABADO.fim)) return { quando };
+    return undefined;
+  }
+  // Segunda a sexta, ou dia desconhecido (só barra o que não cabe em nenhum dia).
+  if (hora !== undefined && (hora < HORARIO_SEMANA.inicio || hora >= HORARIO_SEMANA.fim)) return { quando };
+  return undefined;
+}

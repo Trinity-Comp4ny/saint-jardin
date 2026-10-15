@@ -161,6 +161,12 @@ export interface EntradaNLU {
    * insistir no convite.
    */
   negativo?: boolean;
+  /**
+   * A pessoa não decidiu nem recusou: "vou pensar", "vou ver com meu noivo",
+   * "preciso conversar". Distinto de `negativo`: na oferta do mini, quem está
+   * indeciso recebe o PDF, quem recusa recebe a pergunta das propostas tradicionais.
+   */
+  indeciso?: boolean;
   /** Preferência de visita, quando a conversa está no fluxo de agendamento. */
   visita?: PreferenciaVisita;
   nomeDetectado?: string;

@@ -74,7 +74,8 @@ describe('fluxo feliz - evento normal', () => {
     // A abertura (texto + vídeo) sempre vai primeiro, mas não repete a qualificadora:
     // os dados já vieram, então pula direto pra proposta no mesmo turno.
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto', 'pdf']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto', 'pdf', 'texto']);
+    expect(r.saidas.at(-1)?.texto).toMatch(/^O que acharam da proposta\?/);
     expect(r.saidas[0]?.texto).toMatch(/Me chamo Raquel/);
     expect(r.saidas[1]?.video).toBe('apresentacao');
     expect(r.saidas[2]?.texto).toMatch(/proposta para casamentos em 2027/);
@@ -202,13 +203,16 @@ describe('fluxo feliz - evento normal', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    // Mensagem de ano (literal da Raquel) + PDF do ano. Sem convite de visita:
-    // ele vai no follow-up de 12h.
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    // Mensagem de ano (literal da Raquel) + PDF do ano + convite de visita (texto da
+    // Raquel de 15/10/2026, literal e sem passar pelo Redator).
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
     expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2028/);
     expect(r.saidas[0]?.texto).toMatch(/Destination Wedding/);
     expect(r.saidas[1]?.pdf).toBe('proposta_2028');
-    expect(r.saidas.some((s) => /agendar/i.test(s.texto ?? ''))).toBe(false);
+    expect(r.saidas[2]?.texto).toBe(
+      'O que acharam da proposta? Gostaria de agendar uma visita para conhecer nosso espaço pessoalmente? É ainda mais lindo! ✨',
+    );
+    expect(r.saidas[2]?.humanizar).toBeFalsy();
     expect(r.conversa.propostaEnviadaEm).toBe(AGORA);
   });
 
@@ -237,8 +241,9 @@ describe('fluxo mini wedding', () => {
   it('envia o PDF do mini quando a noiva aceita', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
-    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta), sem convite de visita
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta) + convite de visita
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas[2]?.texto).toMatch(/^O que acharam da proposta\?/);
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
     expect(r.saidas[1]?.pdf).toBe('proposta_mini');
     expect(r.conversa.propostaEnviadaEm).toBe(AGORA);
@@ -278,7 +283,7 @@ describe('fluxo mini wedding', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
     expect(r.saidas[0]?.texto).toBe('Segue nosso PDF de mini wedding com as informações:');
     expect(r.saidas[1]?.pdf).toBe('proposta_mini');
   });
@@ -303,7 +308,7 @@ describe('aceite das propostas tradicionais depois de recusar o mini', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
     expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2028/);
     expect(r.saidas[1]?.pdf).toBe('proposta_2028');
     expect(r.conversa.slots.tradicionalAceito).toBe(true);
@@ -322,7 +327,7 @@ describe('aceite das propostas tradicionais depois de recusar o mini', () => {
     // Na resposta com o ano, vai a proposta (o mini não volta, mesmo sendo quarta com 50).
     const r2 = decidir(r.conversa, nlu({ slots: { ano: 2027 } }), ctx);
     expect(r2.conversa.estado).toBe('proposta_enviada');
-    expect(r2.saidas.at(-1)?.pdf).toBe('proposta_2027');
+    expect(r2.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
   });
 
   it('responder só com o ano também vale como aceite', () => {
@@ -332,7 +337,7 @@ describe('aceite das propostas tradicionais depois de recusar o mini', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.at(-1)?.pdf).toBe('proposta_2028');
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
   });
 
   it('"não" encerra com despedida cordial', () => {
@@ -379,14 +384,15 @@ describe('primeira mensagem: só inicia o fluxo comercial se pedir orçamento', 
     expect(direto.saidas[0]?.texto?.replace(/^Olá, tudo bem\? /, '')).toBe(depois.saidas[0]?.texto);
   });
 
-  it('depois do "como posso ajudar", dúvida + dado de orçamento: abertura também sem saudação', () => {
+  it('depois do "como posso ajudar", dúvida + dado de orçamento: só "vou verificar", sem vídeo', () => {
     const r = decidir(
       conversaEm('aguardando_assunto'),
       nlu({ intencao: 'fora_do_script', slots: { diaSemana: 'sabado' } }),
       ctx,
     );
-    expect(r.saidas[0]?.texto).not.toMatch(/tudo bem/i);
-    expect(r.saidas[1]?.tipo).toBe('video');
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto']);
+    expect(r.saidas[0]?.texto).toMatch(/já te respondo/i);
   });
 
   it('depois do "como posso ajudar", outro cumprimento não repete a pergunta', () => {
@@ -588,10 +594,10 @@ describe('visita de noiva (coleta e repassa)', () => {
     expect(r.saidas[0]?.texto).toMatch(/que dia ficará melhor/i);
   });
 
-  it('"ok" logo depois da proposta (sem follow-up) NÃO vira aceite de visita', () => {
+  it('"sim" logo depois da proposta aceita o convite de visita que a proposta trouxe', () => {
     const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
-    expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas).toHaveLength(0);
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas[0]?.texto).toMatch(/que dia ficará melhor/i);
   });
 
   it('intenção agendar_visita na proposta também coleta a preferência (não transborda)', () => {
@@ -602,12 +608,12 @@ describe('visita de noiva (coleta e repassa)', () => {
   it('só preferência (sem data concreta): não promete um dia, diz que vai ver na agenda', () => {
     const r = decidir(
       conversaEm('aguardando_pref_visita'),
-      nlu({ visita: { diaSemana: 'domingo', periodo: 'manha' } }),
+      nlu({ visita: { diaSemana: 'quinta', periodo: 'manha' } }),
       ctx,
     );
     expect(r.conversa.estado).toBe('handoff');
     expect(r.conversa.motivoHandoff).toMatch(/visita da noiva/);
-    expect(r.conversa.motivoHandoff).toMatch(/domingo/);
+    expect(r.conversa.motivoHandoff).toMatch(/quinta/);
     // não diz "esse dia" (o bot não tem calendário nem uma data ainda)
     expect(r.saidas[0]?.texto).toMatch(/ver um dia e horário/i);
     expect(r.saidas[0]?.texto).not.toMatch(/esse dia/i);
@@ -1009,15 +1015,15 @@ describe('dúvida/negociação no primeiro contato', () => {
     expect(r.saidas.at(-1)?.texto).toMatch(/já te respondo/i);
   });
 
-  it('fora_do_script junto de dado de orçamento: abre com o vídeo e repassa a pergunta', () => {
+  it('fora_do_script junto de dado de orçamento: também sem vídeo (pode ser cliente fechada)', () => {
     const r = decidir(
       conversaEm('novo'),
-      nlu({ intencao: 'fora_do_script', slots: { diaSemana: 'sabado', convidados: 150 } }),
+      nlu({ intencao: 'fora_do_script', slots: { mesDia: '08-21', convidados: 150 } }),
       ctx,
     );
     expect(r.conversa.estado).toBe('handoff');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
-    expect(r.saidas.at(-1)?.texto).toMatch(/já te respondo/i);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto']);
+    expect(r.saidas[0]?.texto).toMatch(/já te respondo/i);
   });
 
   it('negociar na 1ª mensagem idem', () => {
@@ -1084,5 +1090,169 @@ describe('resumo do evento para a Raquel', () => {
 
   it('vazio quando nada foi coletado', () => {
     expect(resumoEvento({})).toBe('');
+  });
+});
+
+describe('mini wedding não vale em feriado nem véspera (regra obrigatória)', () => {
+  const AGORA_2026 = '2026-10-15T12:00:00.000Z';
+  const ctx26: ContextoDecisao = { agora: AGORA_2026 };
+
+  it('7 de setembro de 2027 (terça, feriado) com 40 pessoas vai para a proposta normal, não para o mini', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao'),
+      nlu({ slots: { data: '2027-09-07', ano: 2027, convidados: 40 } }),
+      ctx26,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.some((s) => /mini wedding/i.test(s.texto ?? ''))).toBe(false);
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
+  });
+
+  it('véspera (6/9/2027, segunda) também não é mini', () => {
+    expect(ehMiniWedding({ data: '2027-09-06', ano: 2027, convidados: 40 })).toBe(false);
+  });
+
+  it('feriado móvel: Corpus Christi (27/5/2027) e a véspera (26/5)', () => {
+    expect(ehMiniWedding({ data: '2027-05-27', ano: 2027, convidados: 40 })).toBe(false);
+    expect(ehMiniWedding({ data: '2027-05-26', ano: 2027, convidados: 40 })).toBe(false);
+  });
+
+  it('dia comum de semana continua sendo mini', () => {
+    expect(ehMiniWedding({ data: '2028-03-15', ano: 2028, convidados: 40 })).toBe(true);
+  });
+
+  it('só dia e mês (sem ano): feriado de data fixa já impede o mini', () => {
+    expect(ehMiniWedding({ mesDia: '09-07', convidados: 40, preferenciaDia: 'dia_de_semana' })).toBe(false);
+    expect(ehMiniWedding({ mesDia: '03-15', convidados: 40, preferenciaDia: 'dia_de_semana' })).toBe(true);
+  });
+
+  it('dia de semana sem data (só "durante a semana") continua oferecendo o mini, que traz a regra no texto', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao'),
+      nlu({ slots: { preferenciaDia: 'dia_de_semana', convidados: 40 } }),
+      ctx26,
+    );
+    expect(r.conversa.estado).toBe('aguardando_interesse_mini');
+    expect(r.saidas[0]?.texto).toMatch(/exceto feriados ou vésperas/);
+  });
+
+  it('aceitar o mini com uma data que é feriado muda para a proposta normal', () => {
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini', { preferenciaDia: 'dia_de_semana', convidados: 40 }),
+      nlu({ slots: { data: '2027-09-07', ano: 2027 } }),
+      ctx26,
+    );
+    expect(r.saidas.some((s) => s.pdf === 'proposta_mini')).toBe(false);
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
+  });
+});
+
+describe('mini: indecisa e pergunta sobre o mini', () => {
+  const slotsMini = { diaSemana: 'segunda', convidados: 30, ano: 2028 } as const;
+
+  it('"vou ver com meu noivo" recebe o PDF do mini (não a pergunta das tradicionais)', () => {
+    const r = decidir(conversaEm('aguardando_interesse_mini', slotsMini), nlu({ indeciso: true, negativo: true }), ctx);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas[1]?.pdf).toBe('proposta_mini');
+    expect(r.conversa.estado).toBe('proposta_enviada');
+  });
+
+  it('pergunta fora do roteiro sobre o mini ("tem hospedagem?") recebe o PDF e passa para a Raquel', () => {
+    const r = decidir(conversaEm('aguardando_interesse_mini', slotsMini), nlu({ intencao: 'fora_do_script' }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas[1]?.pdf).toBe('proposta_mini');
+    expect(r.saidas[0]?.texto).toBe('Segue nosso PDF de mini wedding com as informações:');
+  });
+});
+
+describe('convite de visita depois da proposta', () => {
+  it('"ok" e "sim" depois da proposta pedem o dia da visita', () => {
+    for (const afirmativo of [true]) {
+      const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo }), ctx);
+      expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    }
+  });
+
+  it('o convite sai depois de qualquer proposta, nunca antes do PDF', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 150 }),
+      nlu({ slots: { ano: 2028 } }),
+      ctx,
+    );
+    const tipos = r.saidas.map((s) => s.tipo);
+    expect(tipos.lastIndexOf('texto')).toBeGreaterThan(tipos.indexOf('pdf'));
+  });
+});
+
+describe('visita fora do horário anunciado: abre exceção em vez de recusar', () => {
+  const pedir = (visita: Parameters<typeof nlu>[0] extends infer P ? P : never) =>
+    decidir(conversaEm('aguardando_pref_visita'), nlu(visita), ctx);
+
+  it('domingo às 15h', () => {
+    const r = pedir({ visita: { dataHora: 'domingo às 15h' } });
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas[0]?.texto).toBe(
+      'Entendi! Vou ver aqui com a equipe se conseguimos abrir uma exceção para domingo às 15h e já te retorno, ok? ☺️',
+    );
+    expect(r.saidas[0]?.humanizar).toBeFalsy();
+    expect(r.conversa.motivoHandoff).toMatch(/FORA DO HORÁRIO/);
+    expect(r.conversa.motivoHandoff).toMatch(/domingo às 15h/);
+  });
+
+  it('sábado às 16h (depois das 13h)', () => {
+    const r = pedir({ visita: { diaSemana: 'sabado', dataHora: 'sábado às 16h' } });
+    expect(r.conversa.motivoHandoff).toMatch(/FORA DO HORÁRIO/);
+    expect(r.saidas[0]?.texto).toMatch(/exceção/);
+  });
+
+  it('só a preferência "domingo de manhã" também é fora', () => {
+    const r = pedir({ visita: { diaSemana: 'domingo', periodo: 'manha' } });
+    expect(r.saidas[0]?.texto).toMatch(/exceção para domingo de manhã/);
+  });
+
+  it('sábado de tarde (preferência sem hora) é fora', () => {
+    const r = pedir({ visita: { diaSemana: 'sabado', periodo: 'tarde' } });
+    expect(r.conversa.motivoHandoff).toMatch(/FORA DO HORÁRIO/);
+  });
+
+  it('dia de semana depois das 18h é fora', () => {
+    const r = pedir({ visita: { dataHora: 'quarta às 19h' } });
+    expect(r.conversa.motivoHandoff).toMatch(/FORA DO HORÁRIO/);
+  });
+
+  it('dentro do horário segue o fluxo normal: sábado às 10h e quinta às 15h', () => {
+    expect(pedir({ visita: { dataHora: 'sábado às 10h' } }).saidas[0]?.texto).toMatch(/^Perfeito, anotei sábado às 10h/);
+    expect(pedir({ visita: { dataHora: 'quinta às 15h' } }).saidas[0]?.texto).toMatch(/^Perfeito, anotei quinta às 15h/);
+    expect(pedir({ visita: { diaSemana: 'sabado', periodo: 'manha' } }).conversa.motivoHandoff).not.toMatch(/FORA/);
+  });
+
+  it('sem dia nem hora ("qualquer dia") não é fora', () => {
+    const r = pedir({ visita: { indiferente: true } });
+    expect(r.conversa.motivoHandoff).not.toMatch(/FORA/);
+  });
+});
+
+describe('proposta enviada: dado reemitido pelo modelo não gera nova cotação', () => {
+  const slots = { ano: 2028, diaSemana: 'sabado', convidados: 150 } as const;
+
+  it('mesmos dados (o modelo reemitiu os "dados já coletados"): não re-cota, trata a intenção', () => {
+    const r = decidir(
+      conversaEm('proposta_enviada', slots),
+      nlu({ intencao: 'agendar_visita', slots: { ano: 2028, diaSemana: 'sabado', convidados: 150 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
+  });
+
+  it('dado que muda (outro ano) continua re-cotando', () => {
+    const r = decidir(conversaEm('proposta_enviada', slots), nlu({ slots: { ano: 2027 } }), ctx);
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2027');
+  });
+
+  it('o mesmo vale depois de encerrar', () => {
+    const r = decidir(conversaEm('encerrada', slots), nlu({ slots: { ano: 2028 } }), ctx);
+    expect(r.saidas).toHaveLength(0);
   });
 });

@@ -57,3 +57,40 @@ O primeiro teste real mostrou quatro pontos, corrigidos em seguida:
   dependem de o modelo obedecer ao prompt.
 - **`#reset` arquiva o histórico** (migration 0007, coluna `mensagens.arquivada`) em vez de apagar, para
   conversas de teste poderem ser analisadas depois. Sem a migration, o código cai no comportamento antigo.
+
+## Ajustes de 15/10/2026 (bateria de usabilidade, 89 cenários)
+
+Uma bateria com o Gemini real (local) e 35 cenários em produção (webhook assinado, número de teste)
+achou os pontos abaixo. Ferramenta guardada em `tools/usabilidade/` (não roda no CI: o modelo varia).
+
+- **Convite de visita depois de toda proposta** (texto da Raquel, 15/10): "O que acharam da proposta?
+  Gostaria de agendar uma visita...". Sai depois do PDF normal, do mini e do mini com informações. Com
+  o convite imediato, "sim/ok" volta a valer como aceite na hora (a trava "só depois do follow-up"
+  saiu). O follow-up de 12h continua.
+- **Mini wedding nunca em feriado nem véspera** (`src/domain/feriados.ts`). Calculado no código, sem
+  API: fixos, Páscoa (Meeus/Jones/Butcher) e os móveis (Carnaval seg e ter, Sexta Santa, Corpus
+  Christi), qualquer ano. Os testes comparam com a BrasilAPI de 2026 a 2035. Feriados locais:
+  `FERIADOS_LOCAIS` (vazio até a Raquel informar a cidade). Data de feriado vai para a proposta normal
+  (o PDF tem o valor "sábado/feriado/véspera"). Só "durante a semana", sem data, ainda oferece o mini,
+  cujo texto já diz "exceto feriados ou vésperas".
+- **Visita fora do horário anunciado** (domingo, sábado depois das 13h, fora de 8h às 18h): em vez de
+  recusar, o bot diz que vai ver com a equipe se abre uma exceção e passa para a Raquel, com o motivo
+  "visita FORA DO HORÁRIO". "Horário comercial" assumido como 8h às 18h (a Raquel não definiu).
+- **`#reset` passa em handoff.** O pipeline descartava a mensagem antes do comando de reset, justo
+  quando o teste fica preso.
+- **Entidades HTML** que o Gemini às vezes devolve ("s&#225;bado") são decodificadas.
+- **Cliente fechada com data na mensagem** não recebe mais vídeo: no primeiro contato, dúvida ou
+  negociação só ganha "vou verificar". O vídeo é só para quem pede orçamento.
+- **Redes determinísticas sobre o NLU** (`intencoesDeterministicas.ts`, `slotsDeterministicos.ts`): evento
+  que não é casamento, pergunta de preço (é pedido de orçamento), problema com o PDF ("não consegui
+  abrir"), "vou ver com meu noivo" (indecisa: recebe o PDF do mini), "visita técnica", ano que o bot
+  não vende com dados de orçamento, e "uns 40" como convidados. O modelo varia entre chamadas mesmo em
+  temperatura 0, então regra que importa não depende dele.
+- **Redator** só pergunta "e com você?" se a pessoa perguntou "tudo bem?".
+- **Re-cotação só quando o dado muda**: o modelo às vezes reemite os dados já coletados.
+- Pergunta fora do roteiro logo depois da oferta do mini recebe o PDF do mini e passa para a Raquel.
+
+Decidido: handoff continua silencioso (sem aviso à noiva), inclusive para perguntas depois da proposta.
+
+Em aberto, aguardando a Raquel: o que responder para 2026 e 2029 em diante, e o que fazer acima de 240
+convidados (hoje manda a proposta).
