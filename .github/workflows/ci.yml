@@ -1,0 +1,135 @@
+name: CI
+
+# O que este workflow garante:
+#   - toda PR: typecheck, testes e as migrations aplicadas (duas vezes) num Postgres
+#     limpo, sem comando destrutivo escondido;
+#   - merge na main: as migrations pendentes são aplicadas no banco de produção.
+#
+# A Vercel publica o app por conta própria quando o merge chega na main, e os dois
+# disparam ao mesmo tempo. Por isso migration tem que ser ADITIVA (coluna nova, tabela
+# nova) e o código tolerar a coluna ainda não existir, como no fallback do #reset.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Mínimo possível. O job de produção não precisa de mais que ler o repositório.
+permissions:
+  contents: read
+
+env:
+  SUPABASE_CLI_VERSION: "2.109.1"
+
+jobs:
+  test:
+    name: Typecheck e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  migrations-check:
+    name: Migrations num banco limpo
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGURL: postgresql://postgres:ci@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # Migration que apaga dado precisa de um aval explícito no próprio arquivo.
+      # O banco guarda telefone e conversa de clientes.
+      - name: Sem comando destrutivo sem aval
+        run: |
+          set -euo pipefail
+          falhou=0
+          for f in supabase/migrations/*.sql; do
+            if grep -qiE '^[[:space:]]*(drop (table|schema|column)|truncate|delete from)' "$f" \
+               && ! grep -q -- '-- allow-destructive' "$f"; then
+              echo "::error file=$f::comando destrutivo sem '-- allow-destructive' no arquivo"
+              falhou=1
+            fi
+          done
+          exit $falhou
+
+      # Duas passadas: a segunda prova que reaplicar é seguro (o banco de produção
+      # nunca teve histórico de migrations; a primeira execução automática reaplica
+      # as antigas).
+      - name: Aplicar todas as migrations, duas vezes
+        run: |
+          set -euo pipefail
+          for passada in 1 2; do
+            echo "== passada $passada"
+            for f in supabase/migrations/*.sql; do
+              echo "-- $f"
+              psql "$PGURL" -v ON_ERROR_STOP=1 -q -f "$f"
+            done
+          done
+
+      # Pega o drift que já aconteceu uma vez: banco novo recusando um estado que o
+      # código usa, ou um tipo de mensagem que o código grava.
+      - name: O schema aceita o que o código grava
+        run: |
+          psql "$PGURL" -v ON_ERROR_STOP=1 <<'SQL'
+          insert into conversas (telefone, estado) values ('ci-1', 'aguardando_assunto');
+          insert into conversas (telefone, estado) values ('ci-2', 'aguardando_aceite_tradicional');
+          update conversas set proposta_enviada_em = now(), ultima_entrada_em = now(),
+                               followup_enviado_em = now() where telefone = 'ci-1';
+          insert into mensagens (telefone, direcao, tipo, conteudo) values ('ci-1', 'saida', 'video', 'apresentacao');
+          insert into fila_mensagens (telefone, tipo, conteudo, processar_apos) values ('ci-1', 'outro', 'x', now());
+          update mensagens set arquivada = true where telefone = 'ci-1';
+          select count(*) from visitas;
+          SQL
+
+  migrate:
+    name: Migrations em produção
+    needs: [test, migrations-check]
+    # Só no push para a main: PR nunca enxerga o segredo do banco.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # O segredo SUPABASE_DB_URL vive neste environment. Para exigir um clique de
+    # aprovação antes de aplicar, adicione "Required reviewers" nele no GitHub.
+    environment: production
+    # Duas execuções nunca aplicam migration ao mesmo tempo, e cancelar um
+    # `db push` no meio é pior que esperar o anterior.
+    concurrency:
+      group: migrate-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      # SUPABASE_DB_URL deve ser o Session Pooler (IPv4): a conexão direta do
+      # Supabase é IPv6 e o runner do GitHub não alcança.
+      - name: Migrations pendentes (dry-run)
+        run: supabase db push --dry-run --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+
+      - name: Aplicar migrations
+        run: supabase db push --db-url "$SUPABASE_DB_URL"
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
