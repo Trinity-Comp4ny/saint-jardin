@@ -41,6 +41,18 @@ npm run dev       # sobe o app Next (webhook em /api/whatsapp, health em /api/he
 4. Bot do Telegram + `TELEGRAM_CHAT_ID`. Preencher `.env` (ver `.env.example`).
 5. Agendar `/api/process` via pg_cron (ver `supabase/migrations/0002_fila.sql`).
 
+### Migrations automáticas
+
+Merge na `main` aplica as migrations de `supabase/migrations/` no banco de produção
+(`.github/workflows/ci.yml`, [ADR-0011](docs/03-adr/0011-migrations-automaticas-no-merge.md)). Pré-requisito:
+secret `SUPABASE_DB_URL` (Session Pooler, IPv4) no environment `production` do GitHub:
+
+```bash
+gh secret set SUPABASE_DB_URL --env production --repo Trinity-Comp4ny/saint-jardin
+```
+
+Migration nova: próximo número (`0009_...`), aditiva, idempotente (`if not exists`).
+
 ## Estrutura do código
 
 ```
