@@ -31,6 +31,19 @@ describe('ajustarEntrada: ano que a agenda ainda não abriu', () => {
     expect(e('pode ser 2028 ou 2029').anoIndisponivel).toBeUndefined();
   });
 
+  it('2030 com dados de orçamento vai para a Raquel mesmo se o modelo já tinha dito fora_do_script', () => {
+    // Regressão (produção, B23): outra regra devolvia esse caso para seguir_fluxo e o bot só
+    // perguntava "2027 ou 2028". Os dois pontos de partida do modelo precisam dar o mesmo resultado.
+    for (const modelo of ['seguir_fluxo', 'fora_do_script'] as const) {
+      const r = ajustarEntrada('2030, sábado, 100 pessoas', 'aguardando_qualificacao', {
+        slots: { diaSemana: 'sabado', convidados: 100 },
+        intencao: modelo,
+      });
+      expect(r.intencao).toBe('fora_do_script');
+      expect(r.anoIndisponivel).toBeUndefined();
+    }
+  });
+
   it('2030 em diante vai para a Raquel (fora_do_script), sem aviso de 2029', () => {
     const r = e('queria para 2030');
     expect(r.anoIndisponivel).toBeUndefined();
@@ -152,5 +165,13 @@ describe('GeminiNLU: 2029 mesmo quando o modelo descarta o ano', () => {
     expect(r.slots.ano).toBeUndefined();
     expect(r.anoIndisponivel).toBe(2029);
     expect(r.intencao).toBe('seguir_fluxo');
+  });
+});
+
+describe('2030 em diante: passa para a Raquel em silêncio', () => {
+  it('fora_do_script na qualificação vira handoff sem resposta', () => {
+    const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ intencao: 'fora_do_script' }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas).toHaveLength(0);
   });
 });
