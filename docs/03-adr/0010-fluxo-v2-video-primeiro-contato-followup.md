@@ -92,8 +92,8 @@ achou os pontos abaixo. Ferramenta guardada em `tools/usabilidade/` (não roda n
 
 Decidido: handoff continua silencioso (sem aviso à noiva), inclusive para perguntas depois da proposta.
 
-Em aberto, aguardando a Raquel: o que responder para 2026 e 2029 em diante, e o que fazer acima de 240
-convidados (hoje manda a proposta).
+Respondido depois, ver o addendum "Decisões de 15/10" no fim: 2029, acima de 240 convidados, feriados
+locais e horário comercial. Ainda em aberto: 2026 e 2030 em diante.
 
 ## Visita técnica: data do casamento e data da visita em campos separados (15/10/2026)
 
@@ -114,3 +114,18 @@ mesmo conjunto de data da conversa (`data`, `ano`...), e a do casamento era lida
   banco. A fonte da verdade continua em `slots`. `salvar` tolera a ausência das colunas (app e
   migration sobem juntos no merge).
 - O alerta do Telegram mostra "Fornecedor", "Visita técnica" e "Casamento atendido" em linhas separadas.
+
+## Decisões de 15/10/2026 (Raquel e Matheus)
+
+- **2029:** a agenda abre em janeiro de 2027. Quem pede 2029 recebe o aviso "Vamos abrir a agenda de
+  2029 em janeiro de 2027, mas já posso te enviar os valores de 2028..." e o fluxo segue com 2028 como
+  base: pergunta o que falta, oferece o mini ou manda o PDF de 2028. É na visita que se negocia. O aviso
+  sai uma vez. `Slots.anoSolicitado` guarda o ano pedido e aparece no alerta ("pediu 2029"). O ano é
+  detectado por regra (`anoIndisponivel`), porque o schema do modelo só aceita 2027 e 2028.
+- **2030 em diante:** sem orientação; vai para a Raquel, em silêncio. **2026:** sem orientação; o bot
+  continua pedindo "2027 ou 2028".
+- **Acima de 240 convidados:** manda o orçamento normalmente. O espaço comporta essa gente em pé, e o
+  limite de 240 é para quem fica sentada. Se a noiva tiver dúvida, a Raquel explica depois, por áudio.
+- **Feriados:** só nacionais. O espaço fica em Sorocaba/Araçoiaba da Serra (SP), e os municipais e
+  estaduais não entram (`FERIADOS_LOCAIS` segue vazio).
+- **Horário comercial da visita:** 8h às 18h, confirmado.

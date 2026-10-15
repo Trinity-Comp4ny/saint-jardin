@@ -146,7 +146,7 @@ export function descreverData(dataISO: string): string {
 // ---------------------------------------------------------------------------
 // Horário que o bot anuncia para visita de noiva (texto da Raquel, 14/10/2026):
 // "segunda a sexta, em horário comercial, e aos sábados, das 8h às 13h".
-// "Horário comercial" não foi definido: assumimos 8h às 18h (CONFIRMAR COM A RAQUEL).
+// "Horário comercial": 8h às 18h (confirmado em 15/10/2026).
 // Pedido fora disso não é recusado: o bot abre uma exceção a ser avaliada pela equipe.
 // ---------------------------------------------------------------------------
 

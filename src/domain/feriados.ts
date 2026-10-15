@@ -7,10 +7,13 @@
 // Corpus Christi. Carnaval e Corpus Christi são "ponto facultativo" por lei, mas na
 // prática o mercado de eventos os trata como feriado, e a BrasilAPI também os lista.
 
-/** Feriados locais (estaduais e municipais) que também bloqueiam o mini wedding. */
+/**
+ * Feriados locais (estaduais e municipais) que também bloqueiam o mini wedding.
+ * DECIDIDO (15/10/2026): só nacionais. O espaço fica em Sorocaba/Araçoiaba da Serra (SP), e os
+ * feriados municipais e estaduais não entram. A lista existe para o caso de isso mudar.
+ */
 export const FERIADOS_LOCAIS: readonly string[] = [
-  // Formato "MM-DD", recorrente todo ano. Vazio até a Raquel informar a cidade do espaço.
-  // Ex.: '07-09' (revolução de 1932, SP), '01-25' (aniversário da cidade de São Paulo).
+  // Formato "MM-DD", recorrente todo ano. Ex.: '07-09' (revolução de 1932, SP).
 ];
 
 /** Feriados de data fixa, "MM-DD". */

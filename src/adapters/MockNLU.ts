@@ -2,6 +2,7 @@
 // sem API) e para o sandbox local. Em produção, usar GeminiNLU.
 
 import type { NLU } from '../ports';
+import { ehSaudacaoPura } from '../domain/texto';
 import type { Ano, Conversa, DiaSemana, EntradaNLU, Intencao, Slots } from '../domain/types';
 
 const DIAS: Record<string, DiaSemana> = {
@@ -103,19 +104,6 @@ function extrairSlots(t: string): Slots {
   }
 
   return slots;
-}
-
-// Cumprimento puro: tirando as palavras de abertura e a pontuação, não sobra nada.
-const SAUDACAO =
-  'oi+e?|ol[áa]|opa|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|td bem|tudo bom|como vai|tudo certo';
-
-function ehSaudacaoPura(t: string): boolean {
-  if (!new RegExp(`(?<![a-zà-ú])(${SAUDACAO})(?![a-zà-ú])`).test(t)) return false;
-  const resto = t
-    .replace(new RegExp(`(?<![a-zà-ú])(${SAUDACAO})(?![a-zà-ú])`, 'g'), ' ')
-    .replace(/[^a-zà-ú0-9]+/g, ' ')
-    .trim();
-  return resto === '';
 }
 
 function detectarIntencao(t: string): Intencao {
