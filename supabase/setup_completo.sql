@@ -30,7 +30,12 @@ create table if not exists conversas (
   -- Follow-up de 12h da proposta (migration 0006).
   ultima_entrada_em   timestamptz,
   proposta_enviada_em timestamptz,
-  followup_enviado_em timestamptz
+  followup_enviado_em timestamptz,
+  -- Visita técnica (migration 0009): datas e contexto em campos próprios.
+  data_visita_tecnica date,
+  data_casamento      date,
+  casamento_noivos    text,
+  fornecedor_servico  text
 );
 create index if not exists conversas_followup_idx
   on conversas (proposta_enviada_em)

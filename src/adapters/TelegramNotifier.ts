@@ -4,6 +4,7 @@
 import type { Notifier } from '../ports';
 import type { Conversa } from '../domain/types';
 import { resumoEvento } from '../domain/stateMachine';
+import { descreverData, resumoCasamentoAtendido } from '../domain/visita';
 
 export interface TelegramConfig {
   botToken: string;
@@ -17,8 +18,15 @@ export interface TelegramConfig {
  */
 export function mensagemHandoff(conversa: Conversa, motivo: string): string {
   const linhas = ['🔔 Uma conversa precisa de você', `Número: ${conversa.telefone}`];
-  if (conversa.slots.nome) linhas.push(`Noiva: ${conversa.slots.nome}`);
-  const resumo = resumoEvento(conversa.slots);
+  const s = conversa.slots;
+  // Visita técnica: quem escreve é fornecedor, e há duas datas distintas (a da visita e a do
+  // casamento que ele atende), cada uma na sua linha.
+  const visitaTecnica = s.dataVisitaTecnica !== undefined || s.dataCasamento !== undefined;
+  if (s.nome) linhas.push(`${visitaTecnica ? 'Fornecedor' : 'Noiva'}: ${s.nome}`);
+  if (s.dataVisitaTecnica) linhas.push(`Visita técnica: ${descreverData(s.dataVisitaTecnica)}`);
+  const casamento = resumoCasamentoAtendido(s);
+  if (casamento) linhas.push(`Casamento atendido: ${casamento}`);
+  const resumo = resumoEvento(s);
   if (resumo) linhas.push(`Evento: ${resumo}`);
   linhas.push(`Motivo: ${motivo}`);
   linhas.push('Abra o WhatsApp para responder.');

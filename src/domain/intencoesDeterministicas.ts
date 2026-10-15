@@ -3,7 +3,7 @@
 // corrige a leitura aqui, e o modelo nunca é a única barreira de regras que importam
 // (cliente fechada, evento que não é casamento, problema com o PDF).
 
-import type { EntradaNLU, EstadoConversa, PreferenciaVisita } from './types';
+import type { EntradaNLU, EstadoConversa, PreferenciaVisita, Slots } from './types';
 import { diaDaSemanaNoTexto, horaNoTexto, rotuloDiaSemana } from './visita';
 
 const ESTADOS_COMERCIAIS: EstadoConversa[] = ['novo', 'aguardando_assunto', 'aguardando_qualificacao'];
@@ -59,8 +59,8 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
 
   if (RE_VISITA_TECNICA.test(t) && ['fornecedor', 'seguir_fluxo', 'fora_do_script', 'agendar_visita'].includes(e.intencao)) {
     e.intencao = 'visita_tecnica';
-    return e;
   }
+  if (e.intencao === 'visita_tecnica') return separarDatasDaVisitaTecnica(texto, e);
   if (
     comercial &&
     e.intencao === 'fora_do_script' &&
@@ -96,4 +96,79 @@ export function completarVisita(texto: string, visita?: PreferenciaVisita): Pref
     v.dataHora = quando;
   }
   return v;
+}
+
+// Palavras que, logo antes de uma data, mostram que é a data do CASAMENTO que o fornecedor atende.
+const RE_PALAVRA_CASAMENTO = /(casamento|casório|evento|festa|cerim[oô]nia|noiv\w+|wedding)/;
+const RE_DATA_NUMERICA = /(?<!\d)(\d{1,2})\/(\d{1,2})(?:\/(\d{4}|\d{2}))?(?!\d)/g;
+
+interface DataNoTexto {
+  /** ISO se tem ano, "MM-DD" se não. */
+  valor: string;
+  ehCasamento: boolean;
+}
+
+function datasNoTexto(texto: string): DataNoTexto[] {
+  const t = texto.toLowerCase();
+  const achadas: DataNoTexto[] = [];
+  for (const m of t.matchAll(RE_DATA_NUMERICA)) {
+    const dia = Number(m[1]);
+    const mes = Number(m[2]);
+    if (dia < 1 || dia > 31 || mes < 1 || mes > 12) continue;
+    const mm = String(mes).padStart(2, '0');
+    const dd = String(dia).padStart(2, '0');
+    const ano = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : undefined;
+    const antes = t.slice(Math.max(0, (m.index ?? 0) - 40), m.index ?? 0);
+    achadas.push({
+      valor: ano ? `${ano}-${mm}-${dd}` : `${mm}-${dd}`,
+      ehCasamento: RE_PALAVRA_CASAMENTO.test(antes) && !/visita/.test(antes),
+    });
+  }
+  return achadas;
+}
+
+/** Remove de `slots` o conjunto de data (a data do casamento não é a da visita). */
+function tirarDataDosSlots(slots: Slots): Slots {
+  const { data: _d, mesDia: _md, mes: _m, dia: _di, ano: _a, ...resto } = slots;
+  return resto;
+}
+
+/**
+ * Visita técnica: o fornecedor cita duas datas, a do casamento que atende e a da visita que
+ * quer. O modelo às vezes põe a do casamento no conjunto de data da conversa (que é a da
+ * VISITA), e o bot passava a tratar a data do casamento como data da visita. A data que vem
+ * depois de "casamento/evento/festa" é a do casamento: sai de `slots` e vai para
+ * `casamentoAtendido.data`. Se há uma data de visita no texto, ela fica em `slots`.
+ */
+export function separarDatasDaVisitaTecnica(texto: string, entrada: EntradaNLU): EntradaNLU {
+  const datas = datasNoTexto(texto);
+  const casamento = datas.find((d) => d.ehCasamento);
+  if (!casamento) return entrada;
+  const visita = datas.find((d) => !d.ehCasamento);
+
+  const e: EntradaNLU = {
+    ...entrada,
+    casamentoAtendido: { ...entrada.casamentoAtendido, data: entrada.casamentoAtendido?.data ?? casamento.valor },
+  };
+  // Só mexe em `slots` se a data que o modelo colocou lá é a do casamento.
+  const slots = entrada.slots;
+  const slotsTemOCasamento =
+    slots.data === casamento.valor || (!!slots.mesDia && casamento.valor.endsWith(slots.mesDia) && !slots.data);
+  if (slotsTemOCasamento) {
+    const semData = tirarDataDosSlots(slots);
+    if (visita?.valor.length === 10) e.slots = { ...semData, data: visita.valor };
+    else if (visita) e.slots = { ...semData, mesDia: visita.valor };
+    else e.slots = semData;
+  } else if (
+    !visita &&
+    casamento.valor.length === 10 &&
+    slots.ano === Number(casamento.valor.slice(0, 4)) &&
+    !slots.data &&
+    !slots.mesDia
+  ) {
+    // O modelo guardou só o ANO do casamento no conjunto de data da visita.
+    const { ano: _ano, ...semAno } = slots;
+    e.slots = semAno;
+  }
+  return e;
 }

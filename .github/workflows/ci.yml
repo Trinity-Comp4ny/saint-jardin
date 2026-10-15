@@ -98,6 +98,8 @@ jobs:
           insert into mensagens (telefone, direcao, tipo, conteudo) values ('ci-1', 'saida', 'video', 'apresentacao');
           insert into fila_mensagens (telefone, tipo, conteudo, processar_apos) values ('ci-1', 'outro', 'x', now());
           update mensagens set arquivada = true where telefone = 'ci-1';
+          update conversas set data_visita_tecnica = '2027-11-30', data_casamento = '2027-12-15',
+                               casamento_noivos = 'Ana', fornecedor_servico = 'buffet' where telefone = 'ci-1';
           select count(*) from visitas;
           SQL
 

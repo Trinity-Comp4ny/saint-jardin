@@ -94,3 +94,23 @@ Decidido: handoff continua silencioso (sem aviso à noiva), inclusive para pergu
 
 Em aberto, aguardando a Raquel: o que responder para 2026 e 2029 em diante, e o que fazer acima de 240
 convidados (hoje manda a proposta).
+
+## Visita técnica: data do casamento e data da visita em campos separados (15/10/2026)
+
+O fornecedor fala de duas datas: a do casamento que atende e a da visita que quer. As duas caíam no
+mesmo conjunto de data da conversa (`data`, `ano`...), e a do casamento era lida como a da visita
+("Sou do buffet do casamento da Ana, dia 15/12/2027, queria a visita técnica" virava visita em
+15/12/2027 e o bot não perguntava a data).
+
+- Campos próprios em `Slots`: `dataVisitaTecnica` (só depois de validada: terça a sexta, 30 dias),
+  `dataCasamento` (ISO, ou "MM-DD" se faltou o ano), `casamentoNoivos`, `fornecedorServico`.
+- O NLU ganha `casamentoAtendido {data, noivos, servico}`. Em `slots` ficam só os dados de orçamento
+  e a data da PRÓPRIA visita. Uma rede determinística (`separarDatasDaVisitaTecnica`) move para o
+  casamento a data que vem depois de "casamento/evento/festa", caso o modelo a ponha no lugar errado.
+- Ao fechar a visita técnica, o conjunto genérico (`data`, `ano`, `diaSemana`...) é limpo para não
+  parecer a data de um evento de orçamento.
+- Migration `0009`: colunas `data_visita_tecnica`, `data_casamento`, `casamento_noivos`,
+  `fornecedor_servico` em `conversas`, espelho dos slots para a Raquel filtrar e ler no painel do
+  banco. A fonte da verdade continua em `slots`. `salvar` tolera a ausência das colunas (app e
+  migration sobem juntos no merge).
+- O alerta do Telegram mostra "Fornecedor", "Visita técnica" e "Casamento atendido" em linhas separadas.
