@@ -40,3 +40,20 @@ tratar a primeira mensagem sem depender de uma lista dos 100+ clientes fechados 
 - Um cumprimento seguido de pedido de orçamento leva um turno a mais até a abertura.
 - A classificação `saudacao` depende do prompt do Gemini. O MockNLU dos testes não prova o
   comportamento do modelo real: validar no número de teste com a Raquel.
+
+## Ajustes de 15/10/2026 (primeiro teste no WhatsApp)
+
+O primeiro teste real mostrou quatro pontos, corrigidos em seguida:
+
+- **Dois cumprimentos seguidos.** O "como posso ajudar" e a abertura da Raquel começavam com "Olá, tudo
+  bem?". Depois do "como posso ajudar", a abertura vai sem a saudação (`MSG.aberturaSemSaudacao`).
+- **Resposta ao "oi" seca.** Passou a usar o trecho institucional que a Raquel já usava: "Olá, tudo bem? O
+  Saint Jardin Eventos agradece seu contato. Como posso ajudar?".
+- **"Legal! Só preciso saber..." fora do tom.** Era uma variante fixa de `pedirDadosFaltantes`, não o LLM.
+  As variantes perderam as interjeições.
+- **Redator (LLM) restrito.** Só é chamado se a mensagem da pessoa tem conversa social (`temConversaSocial`),
+  e a resposta dele só vale se passar em `respostaDoRedatorAceitavel` (sem interjeição, gíria nem número que
+  o objetivo não tinha). Senão vai o texto fixo. Regras determinísticas, em `src/domain/verniz.ts`: não
+  dependem de o modelo obedecer ao prompt.
+- **`#reset` arquiva o histórico** (migration 0007, coluna `mensagens.arquivada`) em vez de apagar, para
+  conversas de teste poderem ser analisadas depois. Sem a migration, o código cai no comportamento antigo.
