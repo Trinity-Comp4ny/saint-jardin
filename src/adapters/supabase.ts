@@ -77,10 +77,44 @@ export class SupabaseConversaRepo implements ConversaRepository {
   async obter(telefone: string): Promise<Conversa | null> {
     const { data } = await this.db
       .from('conversas')
-      .select('telefone, estado, slots, motivo_handoff, criado_em, atualizado_em')
+      .select(COLUNAS_CONVERSA)
       .eq('telefone', telefone)
       .maybeSingle();
     return data ? mapConversa(data) : null;
+  }
+
+  async pendentesDeFollowup(desdeISO: string, ateISO: string): Promise<Conversa[]> {
+    const { data, error } = await this.db
+      .from('conversas')
+      .select(COLUNAS_CONVERSA)
+      .eq('estado', 'proposta_enviada')
+      .is('followup_enviado_em', null)
+      .gte('proposta_enviada_em', desdeISO)
+      .lte('proposta_enviada_em', ateISO);
+    if (error) throw new Error(`pendentesDeFollowup: ${error.message}`);
+    return (data ?? []).map(mapConversa);
+  }
+
+  async reivindicarFollowup(telefone: string, agoraISO: string): Promise<boolean> {
+    // UPDATE condicional: só uma chamada concorrente encontra followup_enviado_em
+    // nulo e o preenche; a outra recebe zero linhas.
+    const { data, error } = await this.db
+      .from('conversas')
+      .update({ followup_enviado_em: agoraISO })
+      .eq('telefone', telefone)
+      .eq('estado', 'proposta_enviada')
+      .is('followup_enviado_em', null)
+      .select('telefone');
+    if (error) throw new Error(`reivindicarFollowup: ${error.message}`);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async liberarFollowup(telefone: string): Promise<void> {
+    const { error } = await this.db
+      .from('conversas')
+      .update({ followup_enviado_em: null })
+      .eq('telefone', telefone);
+    if (error) throw new Error(`liberarFollowup: ${error.message}`);
   }
 
   async salvar(conversa: Conversa): Promise<void> {
@@ -92,6 +126,9 @@ export class SupabaseConversaRepo implements ConversaRepository {
         motivo_handoff: conversa.motivoHandoff ?? null,
         criado_em: conversa.criadoEm,
         atualizado_em: conversa.atualizadoEm,
+        ultima_entrada_em: conversa.ultimaEntradaEm ?? null,
+        proposta_enviada_em: conversa.propostaEnviadaEm ?? null,
+        followup_enviado_em: conversa.followupEnviadoEm ?? null,
       },
       { onConflict: 'telefone' },
     );
@@ -315,6 +352,9 @@ function mapContato(r: LinhaContato): Contato {
   };
 }
 
+const COLUNAS_CONVERSA =
+  'telefone, estado, slots, motivo_handoff, criado_em, atualizado_em, ultima_entrada_em, proposta_enviada_em, followup_enviado_em';
+
 interface LinhaConversa {
   telefone: string;
   estado: string;
@@ -322,6 +362,9 @@ interface LinhaConversa {
   motivo_handoff: string | null;
   criado_em: string;
   atualizado_em: string;
+  ultima_entrada_em: string | null;
+  proposta_enviada_em: string | null;
+  followup_enviado_em: string | null;
 }
 
 function mapConversa(r: LinhaConversa): Conversa {
@@ -332,5 +375,8 @@ function mapConversa(r: LinhaConversa): Conversa {
     motivoHandoff: r.motivo_handoff ?? undefined,
     criadoEm: r.criado_em,
     atualizadoEm: r.atualizado_em,
+    ultimaEntradaEm: r.ultima_entrada_em ?? undefined,
+    propostaEnviadaEm: r.proposta_enviada_em ?? undefined,
+    followupEnviadoEm: r.followup_enviado_em ?? undefined,
   };
 }

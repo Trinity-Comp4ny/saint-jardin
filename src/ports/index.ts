@@ -86,10 +86,23 @@ export interface ContatoRepository {
 export interface ConversaRepository {
   obter(telefone: string): Promise<Conversa | null>;
   salvar(conversa: Conversa): Promise<void>;
+  /**
+   * Conversas em `proposta_enviada`, sem follow-up enviado, cuja proposta foi
+   * enviada entre `desdeISO` e `ateISO` (inclusive). Candidatas ao follow-up.
+   */
+  pendentesDeFollowup(desdeISO: string, ateISO: string): Promise<Conversa[]>;
+  /**
+   * Reivindica o follow-up de forma ATÔMICA (só uma chamada concorrente vence).
+   * `true` = esta chamada deve enviar; `false` = já foi reivindicado ou a conversa
+   * saiu de `proposta_enviada`.
+   */
+  reivindicarFollowup(telefone: string, agoraISO: string): Promise<boolean>;
+  /** Desfaz a reivindicação quando o envio falhou (o próximo ciclo tenta de novo). */
+  liberarFollowup(telefone: string): Promise<void>;
 }
 
 export type DirecaoMensagem = 'entrada' | 'saida';
-export type TipoMensagemLog = 'texto' | 'pdf' | 'audio';
+export type TipoMensagemLog = 'texto' | 'pdf' | 'video' | 'audio';
 
 /** Uma mensagem do histórico (para dar contexto à leitura e à redação). */
 export interface MensagemLog {

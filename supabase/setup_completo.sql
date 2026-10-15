@@ -26,15 +26,22 @@ create table if not exists conversas (
   slots          jsonb not null default '{}'::jsonb,
   motivo_handoff text,
   criado_em      timestamptz not null default now(),
-  atualizado_em  timestamptz not null default now()
+  atualizado_em  timestamptz not null default now(),
+  -- Follow-up de 12h da proposta (migration 0006).
+  ultima_entrada_em   timestamptz,
+  proposta_enviada_em timestamptz,
+  followup_enviado_em timestamptz
 );
+create index if not exists conversas_followup_idx
+  on conversas (proposta_enviada_em)
+  where estado = 'proposta_enviada' and followup_enviado_em is null;
 
 -- ===== Log de mensagens (auditoria; áudio guarda o texto transcrito) =====
 create table if not exists mensagens (
   id        uuid primary key default gen_random_uuid(),
   telefone  text not null,
   direcao   text not null check (direcao in ('entrada','saida')),
-  tipo      text not null default 'texto' check (tipo in ('texto','pdf','audio')),
+  tipo      text not null default 'texto' check (tipo in ('texto','pdf','audio','video')),
   conteudo  text,
   criado_em timestamptz not null default now()
 );

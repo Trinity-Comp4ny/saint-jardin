@@ -1,11 +1,7 @@
-import type { Ano, TipoPdf } from './types';
+import type { Ano, TipoPdf, TipoVideo } from './types';
 
 /** Catálogo dos PDFs que a Raquel envia. O preço vive dentro do PDF. */
 export const PDF_CATALOGO: Record<TipoPdf, { arquivo: string; descricao: string }> = {
-  apresentacao: {
-    arquivo: 'Saint Jardin Eventos.pdf',
-    descricao: 'Apresentação do espaço',
-  },
   proposta_2027: {
     arquivo: 'Proposta Saint Jardin 2027.pdf',
     descricao: 'Proposta com hospedagem 2027',
@@ -17,6 +13,17 @@ export const PDF_CATALOGO: Record<TipoPdf, { arquivo: string; descricao: string 
   proposta_mini: {
     arquivo: 'Proposta Mini Wedding.pdf',
     descricao: 'Proposta de mini wedding (2027 e 2028)',
+  },
+};
+
+/**
+ * Vídeo de apresentação do espaço (substitui o PDF de 37 páginas). MP4 H.264/AAC
+ * de até 16 MB: é o teto da Cloud API para vídeo.
+ */
+export const VIDEO_CATALOGO: Record<TipoVideo, { arquivo: string; descricao: string }> = {
+  apresentacao: {
+    arquivo: 'apresentacao-saint-jardin.mp4',
+    descricao: 'Vídeo de apresentação do espaço',
   },
 };
 

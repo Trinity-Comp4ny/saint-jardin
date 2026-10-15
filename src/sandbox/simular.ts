@@ -78,7 +78,9 @@ const gemini = new GeminiNLU();
 const redator = new GeminiRedator();
 
 function resumoSaidas(saidas: MensagemSaida[]): string[] {
-  return saidas.map((s) => (s.tipo === 'pdf' ? `[PDF ${s.pdf}]` : (s.texto ?? '')));
+  return saidas.map((s) =>
+    s.tipo === 'pdf' ? `[PDF ${s.pdf}]` : s.tipo === 'video' ? `[VÍDEO ${s.video}]` : (s.texto ?? ''),
+  );
 }
 
 async function simular(cenario: Cenario): Promise<ResultadoCenario> {
@@ -109,7 +111,7 @@ async function simular(cenario: Cenario): Promise<ResultadoCenario> {
     const analise = espiao.analises.at(-1);
     const flags: string[] = [];
 
-    const soTexto = novas.filter((s) => s.tipo !== 'pdf').map((s) => s.texto ?? '');
+    const soTexto = novas.filter((s) => s.tipo === 'texto').map((s) => s.texto ?? '');
     // Silêncio inesperado: nada respondido e não é handoff/humano.
     if (novas.length === 0 && conversa.estado !== 'handoff' && conversa.estado !== 'humano') {
       flags.push('SILENCIO');

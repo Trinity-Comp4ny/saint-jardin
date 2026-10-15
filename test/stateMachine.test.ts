@@ -41,23 +41,27 @@ describe('regras de negócio', () => {
 });
 
 describe('fluxo feliz - evento normal', () => {
-  it('1º contato sem nome: saudação pede o nome + PDF + qualificadora literal', () => {
+  it('1º contato pedindo orçamento: abertura da Raquel + vídeo + qualificadora literal', () => {
     const r = decidir(conversaEm('novo'), nlu(), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
-    expect(r.saidas[0]?.texto).toMatch(/com quem eu falo/i);
-    expect(r.saidas[1]?.pdf).toBe('apresentacao');
-    // a mensagem após o PDF é a qualificadora oficial, literal (não humanizável)
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
+    expect(r.saidas[0]?.texto).toMatch(/Me chamo Raquel e darei continuidade ao seu atendimento/);
+    expect(r.saidas[0]?.texto).toMatch(/breve vídeo de apresentação/);
+    // a abertura não pergunta o nome e é literal (nunca humanizada)
+    expect(r.saidas[0]?.texto).not.toMatch(/com quem/i);
+    expect(r.saidas[0]?.humanizar).toBeFalsy();
+    expect(r.saidas[1]?.video).toBe('apresentacao');
+    // a mensagem após o vídeo é a qualificadora oficial, literal (não humanizável)
     expect(r.saidas[2]?.texto).toMatch(/Para orçamento, você poderia me informar a data e o ano/);
     expect(r.saidas[2]?.humanizar).toBeFalsy();
   });
 
-  it('1º contato com o nome: saudação personaliza e não pede o nome', () => {
+  it('1º contato com o nome: guarda o nome nos slots; a abertura continua a mesma', () => {
     const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Marina' }), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.conversa.slots.nome).toBe('Marina');
-    expect(r.saidas[0]?.texto).toMatch(/Oii Marina, tudo bem/);
-    expect(r.saidas[0]?.texto).not.toMatch(/com quem/i);
+    expect(r.saidas[0]?.texto).toMatch(/Me chamo Raquel/);
+    expect(r.saidas[0]?.texto).not.toMatch(/Marina/);
     expect(r.saidas[2]?.texto).toMatch(/Para orçamento/);
   });
 
@@ -67,21 +71,23 @@ describe('fluxo feliz - evento normal', () => {
       nlu({ nomeDetectado: 'Marina', slots: { diaSemana: 'sabado', convidados: 150, ano: 2027 } }),
       ctx,
     );
-    // Apresentação sempre vai primeiro, mas não repete a qualificadora: os dados
-    // já vieram, então pula direto pra proposta no mesmo turno.
+    // A abertura (texto + vídeo) sempre vai primeiro, mas não repete a qualificadora:
+    // os dados já vieram, então pula direto pra proposta no mesmo turno.
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas[0]?.texto).toMatch(/Oii Marina/);
-    expect(r.saidas[1]?.pdf).toBe('apresentacao');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto', 'pdf']);
+    expect(r.saidas[0]?.texto).toMatch(/Me chamo Raquel/);
+    expect(r.saidas[1]?.video).toBe('apresentacao');
+    expect(r.saidas[2]?.texto).toMatch(/proposta para casamentos em 2027/);
     expect(r.saidas.some((s) => s.texto?.includes('Para orçamento, você poderia'))).toBe(false);
-    expect(r.saidas.find((s) => s.tipo === 'pdf' && s.pdf !== 'apresentacao')?.pdf).toBe('proposta_2027');
+    expect(r.saidas[3]?.pdf).toBe('proposta_2027');
   });
 
   it('1º contato com dado parcial (só o dia) pergunta só o que falta, sem repetir a qualificadora inteira', () => {
     const r = decidir(conversaEm('novo'), nlu({ slots: { diaSemana: 'sabado' } }), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.conversa.slots.diaSemana).toBe('sabado');
-    // Apresentação + só a pergunta do que falta (convidados), não a qualificadora literal.
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    // Abertura + só a pergunta do que falta (convidados), não a qualificadora literal.
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
     expect(r.saidas[2]?.texto).toMatch(/convidados/);
     expect(r.saidas[2]?.texto).not.toMatch(/Para orçamento, você poderia/);
   });
@@ -196,8 +202,24 @@ describe('fluxo feliz - evento normal', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
-    expect(r.saidas.at(-1)?.texto).toMatch(/agendar um dia/i);
+    // Mensagem de ano (literal da Raquel) + PDF do ano. Sem convite de visita:
+    // ele vai no follow-up de 12h.
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2028/);
+    expect(r.saidas[0]?.texto).toMatch(/Destination Wedding/);
+    expect(r.saidas[1]?.pdf).toBe('proposta_2028');
+    expect(r.saidas.some((s) => /agendar/i.test(s.texto ?? ''))).toBe(false);
+    expect(r.conversa.propostaEnviadaEm).toBe(AGORA);
+  });
+
+  it('proposta de 2027 usa o texto de 2027', () => {
+    const r = decidir(
+      conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 200 }),
+      nlu({ slots: { ano: 2027 } }),
+      ctx,
+    );
+    expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2027/);
+    expect(r.saidas[1]?.pdf).toBe('proposta_2027');
   });
 });
 
@@ -215,9 +237,11 @@ describe('fluxo mini wedding', () => {
   it('envia o PDF do mini quando a noiva aceita', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
-    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta) + convite de visita
+    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta), sem convite de visita
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
-    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_mini');
+    expect(r.saidas[1]?.pdf).toBe('proposta_mini');
+    expect(r.conversa.propostaEnviadaEm).toBe(AGORA);
   });
 
   it('regressão: responder com uma data (sem "sim" explícito) também envia o PDF do mini', () => {
@@ -233,14 +257,148 @@ describe('fluxo mini wedding', () => {
     expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_mini');
   });
 
-  it('recusa explícita continua encerrando, mesmo com dado de orçamento junto (negativo tem prioridade)', () => {
+  it('recusa explícita pergunta se pode enviar as propostas tradicionais (não manda PDF ainda)', () => {
     const r = decidir(
       conversaEm('aguardando_interesse_mini', { preferenciaDia: 'dia_de_semana', convidados: 50 }),
       nlu({ negativo: true }),
       ctx,
     );
+    expect(r.conversa.estado).toBe('aguardando_aceite_tradicional');
+    expect(r.saidas).toHaveLength(1);
+    expect(r.saidas[0]?.texto).toBe(
+      'Podemos então enviar nossas propostas tradicionais que incluem o final de semana também?',
+    );
+    expect(r.saidas[0]?.humanizar).toBeFalsy();
+  });
+
+  it('pergunta sobre o mini (sem sim nem não) manda o PDF do mini com as informações', () => {
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini', { preferenciaDia: 'dia_de_semana', convidados: 50 }),
+      nlu(),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas[0]?.texto).toBe('Segue nosso PDF de mini wedding com as informações:');
+    expect(r.saidas[1]?.pdf).toBe('proposta_mini');
+  });
+
+  it('quem responde ao mini pedindo para conhecer o espaço vai para a visita', () => {
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini'),
+      nlu({ intencao: 'agendar_visita' }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+  });
+});
+
+describe('aceite das propostas tradicionais depois de recusar o mini', () => {
+  const slotsMini = { diaSemana: 'quarta', convidados: 50, ano: 2028 } as const;
+
+  it('"sim" envia a proposta normal do ano pedido (e não oferece o mini de novo)', () => {
+    const r = decidir(
+      conversaEm('aguardando_aceite_tradicional', slotsMini),
+      nlu({ afirmativo: true }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2028/);
+    expect(r.saidas[1]?.pdf).toBe('proposta_2028');
+    expect(r.conversa.slots.tradicionalAceito).toBe(true);
+  });
+
+  it('"sim" sem o ano ainda pergunta o ano, sem voltar à oferta do mini', () => {
+    const r = decidir(
+      conversaEm('aguardando_aceite_tradicional', { diaSemana: 'quarta', convidados: 50 }),
+      nlu({ afirmativo: true }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.saidas[0]?.texto).toMatch(/2027 ou 2028/);
+    expect(r.saidas.some((s) => /mini wedding/i.test(s.texto ?? ''))).toBe(false);
+
+    // Na resposta com o ano, vai a proposta (o mini não volta, mesmo sendo quarta com 50).
+    const r2 = decidir(r.conversa, nlu({ slots: { ano: 2027 } }), ctx);
+    expect(r2.conversa.estado).toBe('proposta_enviada');
+    expect(r2.saidas.at(-1)?.pdf).toBe('proposta_2027');
+  });
+
+  it('responder só com o ano também vale como aceite', () => {
+    const r = decidir(
+      conversaEm('aguardando_aceite_tradicional', { diaSemana: 'quarta', convidados: 50 }),
+      nlu({ slots: { ano: 2028 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas.at(-1)?.pdf).toBe('proposta_2028');
+  });
+
+  it('"não" encerra com despedida cordial', () => {
+    const r = decidir(
+      conversaEm('aguardando_aceite_tradicional', slotsMini),
+      nlu({ negativo: true }),
+      ctx,
+    );
     expect(r.conversa.estado).toBe('encerrada');
     expect(r.saidas.some((s) => s.tipo === 'pdf')).toBe(false);
+  });
+
+  it('sem sinal claro fica quieta', () => {
+    const r = decidir(conversaEm('aguardando_aceite_tradicional', slotsMini), nlu(), ctx);
+    expect(r.conversa.estado).toBe('aguardando_aceite_tradicional');
+    expect(r.saidas).toHaveLength(0);
+  });
+});
+
+describe('primeira mensagem: só inicia o fluxo comercial se pedir orçamento', () => {
+  it('só um cumprimento: pergunta como pode ajudar e espera o assunto', () => {
+    const r = decidir(conversaEm('novo'), nlu({ intencao: 'saudacao' }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_assunto');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto']);
+    expect(r.saidas[0]?.texto).toBe('Olá, tudo bem? Como posso ajudar?');
+    expect(r.saidas[0]?.humanizar).toBeFalsy();
+  });
+
+  it('depois do "como posso ajudar", pedir orçamento inicia o fluxo completo', () => {
+    const r = decidir(conversaEm('aguardando_assunto'), nlu(), ctx);
+    expect(r.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
+  });
+
+  it('depois do "como posso ajudar", outro cumprimento não repete a pergunta', () => {
+    const r = decidir(conversaEm('aguardando_assunto'), nlu({ intencao: 'saudacao' }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_assunto');
+    expect(r.saidas).toHaveLength(0);
+  });
+
+  it('depois do "como posso ajudar", dúvida que não é orçamento vai para a Raquel sem vídeo', () => {
+    const r = decidir(conversaEm('aguardando_assunto'), nlu({ intencao: 'fora_do_script' }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas.some((s) => s.tipo === 'video')).toBe(false);
+    expect(r.saidas.at(-1)?.texto).toMatch(/já te respondo/i);
+  });
+
+  it('depois do "como posso ajudar", cliente fechado transborda em silêncio', () => {
+    const r = decidir(conversaEm('aguardando_assunto'), nlu({ intencao: 'cliente_fechado' }), ctx);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas).toHaveLength(0);
+  });
+
+  it('cumprimento que já traz dado de orçamento não é cumprimento: segue o fluxo', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'saudacao', slots: { diaSemana: 'sabado' } }),
+      ctx,
+    );
+    expect(r.saidas.some((s) => s.tipo === 'video')).toBe(true);
+  });
+
+  it('cumprimento fora do primeiro contato (ex.: proposta enviada) não muda nada', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ intencao: 'saudacao' }), ctx);
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas).toHaveLength(0);
   });
 });
 
@@ -333,11 +491,11 @@ describe('variação de frases (anti-repetição)', () => {
 });
 
 describe('visita de noiva (coleta e repassa)', () => {
-  it('só quer visitar (sem dados) apresenta e vai à preferência de visita', () => {
+  it('só quer visitar (sem dados) abre com o vídeo e vai à preferência de visita', () => {
     const r = decidir(conversaEm('novo'), nlu({ intencao: 'agendar_visita' }), ctx);
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
-    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'apresentacao')).toBe(true);
-    expect(r.saidas.at(-1)?.texto).toMatch(/algum dia/i);
+    expect(r.saidas.some((s) => s.tipo === 'video' && s.video === 'apresentacao')).toBe(true);
+    expect(r.saidas.at(-1)?.texto).toMatch(/que dia ficará melhor/i);
   });
 
   it('orçamento + visita na 1ª mensagem, com dados completos: cota já no 1º turno (não handoff)', () => {
@@ -386,13 +544,32 @@ describe('visita de noiva (coleta e repassa)', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
-    expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
+    expect(r.saidas[0]?.texto).toMatch(/que dia ficará melhor/i);
   });
 
-  it('aceite da visita pergunta a preferência de dia', () => {
-    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
+  it('o convite de visita é o texto da Raquel (horários) e vai literal', () => {
+    const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ intencao: 'agendar_visita' }), ctx);
+    expect(r.saidas[0]?.texto).toBe(
+      'Realizamos visitas de segunda a sexta-feira, em horário comercial, e aos sábados, das 8h às 13h.\n' +
+        'Que dia ficará melhor para vocês?',
+    );
+    expect(r.saidas[0]?.humanizar).toBeFalsy();
+  });
+
+  it('"sim" depois do follow-up é aceite da visita: pergunta o dia', () => {
+    const r = decidir(
+      { ...conversaEm('proposta_enviada'), followupEnviadoEm: AGORA },
+      nlu({ afirmativo: true }),
+      ctx,
+    );
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
-    expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
+    expect(r.saidas[0]?.texto).toMatch(/que dia ficará melhor/i);
+  });
+
+  it('"ok" logo depois da proposta (sem follow-up) NÃO vira aceite de visita', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.saidas).toHaveLength(0);
   });
 
   it('intenção agendar_visita na proposta também coleta a preferência (não transborda)', () => {
@@ -617,7 +794,7 @@ describe('handoff', () => {
   it('quer agendar visita sem dados de orçamento conduz à preferência (não handoff)', () => {
     const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ intencao: 'agendar_visita' }), ctx);
     expect(r.conversa.estado).toBe('aguardando_pref_visita');
-    expect(r.saidas[0]?.texto).toMatch(/algum dia/i);
+    expect(r.saidas[0]?.texto).toMatch(/que dia ficará melhor/i);
   });
 
   it('regressão: sem sinal claro na proposta (ex.: correção de nome) NÃO encerra sozinho nem re-convida', () => {
@@ -657,9 +834,10 @@ describe('recusa e encerramento (mata o loop do convite)', () => {
     expect(r.saidas[0]?.texto).toMatch(/disposição|à disposição|me chama/i);
   });
 
-  it('recusa do mini encerra em vez de empurrar visita', () => {
+  it('recusa do mini não empurra visita: pergunta das propostas tradicionais', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ negativo: true }), ctx);
-    expect(r.conversa.estado).toBe('encerrada');
+    expect(r.conversa.estado).toBe('aguardando_aceite_tradicional');
+    expect(r.saidas.some((s) => /visita/i.test(s.texto ?? ''))).toBe(false);
   });
 
   it('recusa na preferência de visita encerra sem repassar para a Raquel', () => {
@@ -801,11 +979,22 @@ describe('mini wedding — correção de dados no aceite', () => {
 });
 
 describe('dúvida/negociação no primeiro contato', () => {
-  it('fora_do_script na 1ª mensagem apresenta o espaço E repassa a pergunta (não engole)', () => {
+  it('fora_do_script na 1ª mensagem repassa a pergunta (não engole) e NÃO manda o vídeo', () => {
     const r = decidir(conversaEm('novo'), nlu({ intencao: 'fora_do_script' }), ctx);
     expect(r.conversa.estado).toBe('handoff');
     expect(r.conversa.motivoHandoff).toMatch(/fora do script/i);
-    expect(r.saidas.some((s) => s.tipo === 'pdf' && s.pdf === 'apresentacao')).toBe(true);
+    expect(r.saidas.some((s) => s.tipo === 'video')).toBe(false);
+    expect(r.saidas.at(-1)?.texto).toMatch(/já te respondo/i);
+  });
+
+  it('fora_do_script junto de dado de orçamento: abre com o vídeo e repassa a pergunta', () => {
+    const r = decidir(
+      conversaEm('novo'),
+      nlu({ intencao: 'fora_do_script', slots: { diaSemana: 'sabado', convidados: 150 } }),
+      ctx,
+    );
+    expect(r.conversa.estado).toBe('handoff');
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
     expect(r.saidas.at(-1)?.texto).toMatch(/já te respondo/i);
   });
 
@@ -817,17 +1006,16 @@ describe('dúvida/negociação no primeiro contato', () => {
 });
 
 describe('coleta do nome da noiva', () => {
-  it('a saudação personaliza quando a noiva se apresenta na 1ª mensagem', () => {
+  it('o nome dito na 1ª mensagem é guardado (a abertura é fixa e não o usa)', () => {
     const r = decidir(conversaEm('novo'), nlu({ nomeDetectado: 'Ester' }), ctx);
     expect(r.conversa.slots.nome).toBe('Ester');
-    // saudação vira "Oii Ester, tudo bem?..." e NÃO pergunta o nome de novo
-    expect(r.saidas[0]?.texto).toMatch(/Oii Ester/);
+    expect(r.saidas[0]?.texto).toMatch(/Me chamo Raquel/);
     expect(r.saidas[0]?.texto).not.toMatch(/com quem/i);
   });
 
-  it('a saudação pergunta o nome quando ela ainda não se apresentou', () => {
+  it('a abertura não pergunta o nome (texto da Raquel, 14/10/2026)', () => {
     const r = decidir(conversaEm('novo'), nlu(), ctx);
-    expect(r.saidas[0]?.texto).toMatch(/com quem eu falo/i);
+    expect(r.saidas[0]?.texto).not.toMatch(/com quem eu falo/i);
   });
 
   it('o nome fica guardado nos slots entre turnos', () => {

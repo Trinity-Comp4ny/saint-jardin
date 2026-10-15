@@ -1,8 +1,8 @@
-// Envio de mensagens pela WhatsApp Cloud API (Graph API). Texto e documento (PDF).
+// Envio de mensagens pela WhatsApp Cloud API (Graph API). Texto, documento (PDF) e vídeo.
 
 import type { MessagingProvider } from '../ports';
-import type { MensagemSaida, TipoPdf } from '../domain/types';
-import { PDF_CATALOGO } from '../domain/pdfs';
+import type { MensagemSaida, TipoPdf, TipoVideo } from '../domain/types';
+import { PDF_CATALOGO, VIDEO_CATALOGO } from '../domain/pdfs';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -11,12 +11,16 @@ export interface WhatsAppConfig {
   token: string;
   /** Resolve a URL pública/assinada do PDF (ex.: Supabase Storage signed URL). */
   resolverPdfUrl: (tipo: TipoPdf) => Promise<string>;
+  /** Resolve a URL pública/assinada do vídeo (MP4 H.264/AAC, até 16 MB). */
+  resolverVideoUrl: (tipo: TipoVideo) => Promise<string>;
   versaoGraph?: string;
   /** Pausa entre mensagens de texto (simula digitação; não a última). */
   delayEntreMs?: number;
   /** Pausa após um documento: a Meta entrega PDF mais devagar que texto, então
    *  esperamos mais para o PDF chegar antes da mensagem seguinte. */
   delayDepoisPdfMs?: number;
+  /** Pausa após um vídeo: é o arquivo mais pesado, então demora mais para chegar. */
+  delayDepoisVideoMs?: number;
   /** Pausa ANTES da primeira mensagem, para o "digitando…" ficar visível um
    *  instante antes da resposta chegar. 0/ausente = sem pausa. */
   delayInicioMs?: number;
@@ -28,6 +32,7 @@ export class WhatsAppCloudProvider implements MessagingProvider {
   async enviar(telefone: string, saidas: MensagemSaida[]): Promise<void> {
     const entre = this.cfg.delayEntreMs ?? 1500;
     const depoisPdf = this.cfg.delayDepoisPdfMs ?? 4000;
+    const depoisVideo = this.cfg.delayDepoisVideoMs ?? 10000;
 
     // Deixa o "digitando…" aparecer um instante antes da primeira mensagem.
     if (this.cfg.delayInicioMs) await sleep(this.cfg.delayInicioMs);
@@ -38,16 +43,19 @@ export class WhatsAppCloudProvider implements MessagingProvider {
     for (let i = 0; i < saidas.length; i++) {
       const s = saidas[i];
       if (!s) continue;
-      let ehPdf = false;
+      let pausaDepois = entre;
       if (s.tipo === 'pdf' && s.pdf) {
         await this.enviarDocumento(telefone, s.pdf);
-        ehPdf = true;
+        pausaDepois = depoisPdf;
+      } else if (s.tipo === 'video' && s.video) {
+        await this.enviarVideo(telefone, s.video);
+        pausaDepois = depoisVideo;
       } else if (s.texto) {
         await this.enviarTexto(telefone, s.texto);
       } else {
         continue;
       }
-      if (i < saidas.length - 1) await sleep(ehPdf ? depoisPdf : entre);
+      if (i < saidas.length - 1) await sleep(pausaDepois);
     }
   }
 
@@ -95,6 +103,16 @@ export class WhatsAppCloudProvider implements MessagingProvider {
       to: telefone,
       type: 'document',
       document: { link, filename: PDF_CATALOGO[tipo].arquivo },
+    });
+  }
+
+  private async enviarVideo(telefone: string, tipo: TipoVideo): Promise<void> {
+    const link = await this.cfg.resolverVideoUrl(tipo);
+    await this.post({
+      messaging_product: 'whatsapp',
+      to: telefone,
+      type: 'video',
+      video: { link },
     });
   }
 

@@ -61,12 +61,23 @@ export interface Slots {
    * data nenhuma.
    */
   dataOcupadaAvisada?: string;
+  /**
+   * Controle interno (NUNCA vem da NLU): a pessoa recusou o mini wedding e aceitou
+   * receber as propostas tradicionais. Sem isso, um dia de semana com até 80
+   * convidados cairia de novo na oferta do mini a cada re-qualificação.
+   */
+  tradicionalAceito?: boolean;
 }
 
 export type EstadoConversa =
   | 'novo'
+  // A primeira mensagem foi só um cumprimento: o bot perguntou "como posso
+  // ajudar?" e espera a pessoa dizer o assunto antes de iniciar o fluxo comercial.
+  | 'aguardando_assunto'
   | 'aguardando_qualificacao'
   | 'aguardando_interesse_mini'
+  // A pessoa recusou o mini: o bot perguntou se pode mandar as propostas tradicionais.
+  | 'aguardando_aceite_tradicional'
   | 'proposta_enviada'
   // Visita (ADR-0005 rev. 30/07): o bot coleta e repassa; não marca.
   | 'aguardando_pref_visita' // noiva aceitou; coletando dia de preferência
@@ -90,6 +101,9 @@ export type Intencao =
   // A pessoa se despede / encerra o assunto ("obrigada", "por enquanto é isso",
   // "depois eu vejo"): o bot agradece e para de puxar convite.
   | 'despedida'
+  // A mensagem é SÓ um cumprimento ("oi", "bom dia"), sem pedido, pergunta nem dado.
+  // Só faz sentido no primeiro contato: o bot não inicia o fluxo comercial ainda.
+  | 'saudacao'
   // Não é noiva buscando orçamento: fornecedor, parceria, imprensa ou afins que
   // precisa da Raquel. Não confundir com visita_tecnica (fornecedor de evento
   // fechado querendo agendar a visita técnica em si).
@@ -110,14 +124,22 @@ export interface Conversa {
   motivoHandoff?: string;
   criadoEm: string;
   atualizadoEm: string;
+  /** Última vez que a PESSOA escreveu (o bot atualiza a cada turno processado). */
+  ultimaEntradaEm?: string;
+  /** Quando a proposta (PDF) foi enviada. Base do follow-up de 12h. */
+  propostaEnviadaEm?: string;
+  /** Quando o follow-up foi enviado (uma vez por proposta). */
+  followupEnviadoEm?: string;
 }
 
-export type TipoPdf = 'apresentacao' | 'proposta_2027' | 'proposta_2028' | 'proposta_mini';
+export type TipoPdf = 'proposta_2027' | 'proposta_2028' | 'proposta_mini';
+export type TipoVideo = 'apresentacao';
 
 export interface MensagemSaida {
-  tipo: 'texto' | 'pdf';
+  tipo: 'texto' | 'pdf' | 'video';
   texto?: string;
   pdf?: TipoPdf;
+  video?: TipoVideo;
   /**
    * Só para textos conversacionais (perguntas, convites): a camada de redação
    * pode reescrever numa voz mais humana, respondendo saudação/small talk. NUNCA

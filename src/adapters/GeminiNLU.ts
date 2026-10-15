@@ -14,7 +14,8 @@ export function formatarHistorico(historico: MensagemLog[] = [], limite = 12): s
   return recentes
     .map((m) => {
       const quem = m.direcao === 'entrada' ? 'Noiva' : 'Raquel';
-      const conteudo = m.tipo === 'pdf' ? '[enviou um PDF]' : m.conteudo;
+      const conteudo =
+        m.tipo === 'pdf' ? '[enviou um PDF]' : m.tipo === 'video' ? '[enviou um vídeo]' : m.conteudo;
       return `${quem}: ${conteudo}`;
     })
     .join('\n');
@@ -34,6 +35,7 @@ const INTENCOES = [
   'fora_do_script',
   'cliente_fechado',
   'despedida',
+  'saudacao',
   'fornecedor',
 ] as const;
 
@@ -190,8 +192,9 @@ Extraia TODOS os dados presentes na mensagem, mesmo quando ela for longa ou tive
   - "fornecedor": a pessoa NÃO é noiva buscando orçamento — é fornecedor, parceria comercial, imprensa, candidato a vaga ou similar, geralmente com dúvidas para tirar (ex.: "sou fornecedor, preciso tirar dúvidas", "trabalho com decoração e queria conversar", "sou de uma empresa e queria uma parceria"). Precisa de atendimento humano. Não confunda com "visita_tecnica". IMPORTANTE: se a pessoa disser em QUALQUER parte da mensagem que é fornecedora/prestadora de serviço (buffet, decoração, fotografia, assessoria etc.), a intenção é SEMPRE "fornecedor" — mesmo que a mesma mensagem também mencione "orçamento", data ou nº de convidados (ela pode estar perguntando sobre orçamento/parceria comercial, não sobre um casamento dela). Nunca deixe menção a dado de evento nessa mensagem mudar a classificação pra "seguir_fluxo".
   - "negociar": quer desconto, parcelamento ou mudar condição de valor.
   - "despedida": está encerrando o assunto ou se despedindo, sem pedir mais nada ("obrigada, era só isso", "por enquanto é isso", "depois eu vejo", "vou pensar e te aviso", "tchau", "valeu"). Diferente de uma dúvida nova.
+  - "saudacao": a mensagem é SÓ um cumprimento ou abertura vazia ("oi", "olá", "olá, tudo bem?", "bom dia", "boa tarde", "opa", "oii tudo bem?"), sem NENHUM pedido, pergunta ou dado. Use SOMENTE quando o estado for "novo" ou "aguardando_assunto". Se a mensagem já pede orçamento, valores ou visita, traz qualquer pergunta, ou qualquer dado (data, convidados, nome com assunto), NÃO é "saudacao". Em qualquer outro estado, cumprimento solto é "seguir_fluxo".
   - "fora_do_script": uma PERGUNTA concreta que foge do atendimento padrão (ex.: "tem buffet?", "tem estacionamento?", "qual o endereço?", "aceita pet?"). NÃO use para saudações, agradecimentos, nem quando a pessoa só diz que vai responder, pede um minuto ou manda uma mensagem social — isso é "seguir_fluxo".
-  - "seguir_fluxo": caso geral. Inclui informar dados, cumprimentar, agradecer, dizer que vai mandar as informações, pedir um minuto/momento, ou pedir orçamento.
+  - "seguir_fluxo": caso geral. Inclui informar dados, agradecer, dizer que vai mandar as informações, pedir um minuto/momento, ou pedir orçamento ou valores (inclusive o texto pronto "Olá! Tenho interesse e quero solicitar um orçamento"). Cumprimento solto só é "seguir_fluxo" fora dos estados "novo" e "aguardando_assunto".
 - afirmativo: true quando a mensagem é uma resposta POSITIVA ou de aceite a uma pergunta de sim/não. Reconheça muitas formas, não só "sim": "quero", "pode mandar", "manda", "pode ser", "por favor", "claro", "com certeza", "aceito", "isso", "ok", "bora", "vamos", "sim por favor", "gostaria sim". Se a pessoa está claramente concordando/pedindo para prosseguir, marque true.
 - negativo: true quando a mensagem RECUSA ou nega uma pergunta de sim/não, ou adia. Reconheça muitas formas, não só "não": "por enquanto não", "agora não", "não obrigada", "depois", "deixa pra depois", "vou pensar", "ainda não", "talvez mais pra frente", "no momento não". Marque afirmativo OU negativo, nunca os dois. Se a mensagem traz um dado novo (uma data, um número, outra pergunta), não marque nenhum dos dois.
 - visita: SÓ quando o estado for "aguardando_pref_visita" (a noiva está dizendo que dia prefere para a visita ao espaço). Preencha:

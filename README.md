@@ -36,7 +36,7 @@ npm run dev       # sobe o app Next (webhook em /api/whatsapp, health em /api/he
 ### Setup externo pendente para o go-live de teste
 
 1. Projeto Supabase (região São Paulo); rodar as migrations em `supabase/migrations/`.
-2. Bucket privado `propostas` no Supabase Storage com os 4 PDFs.
+2. Bucket privado `propostas` no Supabase Storage com os 3 PDFs (2027, 2028, mini wedding) e o vídeo `apresentacao-saint-jardin.mp4` (MP4 H.264/AAC, até 16 MB).
 3. App na Meta (WhatsApp) + número de teste; configurar webhook apontando para a URL do deploy.
 4. Bot do Telegram + `TELEGRAM_CHAT_ID`. Preencher `.env` (ver `.env.example`).
 5. Agendar `/api/process` via pg_cron (ver `supabase/migrations/0002_fila.sql`).
@@ -48,7 +48,7 @@ src/
   domain/        núcleo puro e testável
     types.ts         tipos e regras (limite mini wedding, dias, anos)
     persona.ts       persona "Raquel" + mensagens prontas (fonte única dos textos)
-    pdfs.ts          catálogo de PDFs (o preço vive dentro do PDF)
+    pdfs.ts          catálogo de PDFs e do vídeo de apresentação (o preço vive dentro do PDF)
     stateMachine.ts  máquina de estados determinística (o "cérebro" do fluxo)
   ports/         interfaces (NLU, WhatsApp, calendário, repositórios, notifier)
   adapters/

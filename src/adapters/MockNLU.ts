@@ -105,7 +105,21 @@ function extrairSlots(t: string): Slots {
   return slots;
 }
 
+// Cumprimento puro: tirando as palavras de abertura e a pontuação, não sobra nada.
+const SAUDACAO =
+  'oi+e?|ol[áa]|opa|e a[íi]|bom dia|boa tarde|boa noite|tudo bem|td bem|tudo bom|como vai|tudo certo';
+
+function ehSaudacaoPura(t: string): boolean {
+  if (!new RegExp(`(?<![a-zà-ú])(${SAUDACAO})(?![a-zà-ú])`).test(t)) return false;
+  const resto = t
+    .replace(new RegExp(`(?<![a-zà-ú])(${SAUDACAO})(?![a-zà-ú])`, 'g'), ' ')
+    .replace(/[^a-zà-ú0-9]+/g, ' ')
+    .trim();
+  return resto === '';
+}
+
 function detectarIntencao(t: string): Intencao {
+  if (ehSaudacaoPura(t)) return 'saudacao';
   if (
     /j[áa] fechei|j[áa] fechamos|j[áa] contratei|sou (a )?noiva do dia|meu casamento (é|e|vai ser) (dia|no)|cliente de voc[êe]s|j[áa] sou cliente/.test(
       t,
