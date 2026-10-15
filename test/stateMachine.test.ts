@@ -4,6 +4,7 @@ import {
   dataCompleta,
   decidir,
   ehMiniWedding,
+  mesclarSlots,
   novaConversa,
   resumoEvento,
   type ContextoDecisao,
@@ -1254,5 +1255,48 @@ describe('proposta enviada: dado reemitido pelo modelo não gera nova cotação'
   it('o mesmo vale depois de encerrar', () => {
     const r = decidir(conversaEm('encerrada', slots), nlu({ slots: { ano: 2028 } }), ctx);
     expect(r.saidas).toHaveLength(0);
+  });
+});
+
+describe('mesclarSlots: dia da semana novo que contradiz o antigo substitui o antigo', () => {
+  it('"quarta" antiga + só a preferência "fim de semana" nova: passa a ser fim de semana', () => {
+    const r = mesclarSlots({ diaSemana: 'quarta', preferenciaDia: 'dia_de_semana' }, { preferenciaDia: 'fim_de_semana' });
+    expect(classificarDia(r)).toBe('fim_de_semana');
+    expect(r.diaSemana).toBeUndefined();
+  });
+
+  it('preferência nova que concorda com o dia antigo não apaga o dia', () => {
+    const r = mesclarSlots({ diaSemana: 'quarta' }, { preferenciaDia: 'dia_de_semana' });
+    expect(r.diaSemana).toBe('quarta');
+  });
+
+  it('dia da semana novo substitui a preferência genérica antiga', () => {
+    const r = mesclarSlots({ diaSemana: 'quarta', preferenciaDia: 'dia_de_semana' }, { diaSemana: 'sabado' });
+    expect(r.diaSemana).toBe('sabado');
+    expect(r.preferenciaDia).toBeUndefined();
+    expect(classificarDia(r)).toBe('fim_de_semana');
+  });
+
+  it('data completa antiga numa quarta + "prefiro sábado": a data velha sai, o ano fica', () => {
+    const r = mesclarSlots({ data: '2028-03-15', ano: 2028, diaSemana: 'quarta' }, { diaSemana: 'sabado' });
+    expect(r.data).toBeUndefined();
+    expect(r.ano).toBe(2028);
+    expect(classificarDia(r)).toBe('fim_de_semana');
+  });
+
+  it('data nova na mesma mensagem vence normalmente', () => {
+    const r = mesclarSlots({ diaSemana: 'quarta' }, { data: '2028-03-18', diaSemana: 'sabado' });
+    expect(r.data).toBe('2028-03-18');
+    expect(classificarDia(r)).toBe('fim_de_semana');
+  });
+
+  it('na oferta do mini, "prefiro sábado" que o modelo devolveu só como preferência manda a proposta normal', () => {
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini', { ano: 2028, diaSemana: 'quarta', preferenciaDia: 'dia_de_semana', convidados: 50 }),
+      nlu({ negativo: true, slots: { preferenciaDia: 'fim_de_semana' } }),
+      ctx,
+    );
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
+    expect(r.saidas.some((s) => s.pdf === 'proposta_mini')).toBe(false);
   });
 });
