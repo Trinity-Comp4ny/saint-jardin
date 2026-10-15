@@ -6,19 +6,20 @@ export const PERSONA = {
 } as const;
 
 export const MSG = {
-  // Saudação do primeiro contato, determinística. Se já sabemos o nome (a noiva se
-  // apresentou), personaliza ("Oii Ester, tudo bem?..."); se não, cumprimenta e já
-  // pergunta o nome na própria saudação ("...muito prazer! Com quem eu falo?").
-  apresentacao: (nome?: string): string => {
-    const abertura = nome
-      ? `Oii ${nome}, tudo bem? Me chamo ${PERSONA.nome}, muito prazer!`
-      : `Olá, tudo bem?! Me chamo ${PERSONA.nome}, muito prazer! Com quem eu falo?`;
-    return (
-      `${abertura}\n` +
-      `Primeiramente, quero agradecer pelo contato. ☺️\n` +
-      `Vou te encaminhar nossa apresentação com as informações do espaço!`
-    );
-  },
+  // Primeira mensagem de quem pede orçamento (texto literal da Raquel, 14/10/2026).
+  // Vem antes do vídeo de apresentação. Não pergunta o nome: se a pessoa se
+  // apresentar, a NLU captura sozinha.
+  abertura:
+    'Olá, tudo bem? Me chamo Raquel e darei continuidade ao seu atendimento.\n\n' +
+    'Antes de conversarmos sobre os detalhes do seu evento, gostaria de te apresentar ' +
+    'um pouco do que torna o Saint Jardin um Destination Wedding tão especial. ' +
+    'Vou te enviar um breve vídeo de apresentação do nosso espaço.\n\n' +
+    'Espero que seja o início de uma experiência inesquecível conosco. ✨',
+
+  // Primeira mensagem que é SÓ um cumprimento: o fluxo comercial (vídeo, perguntas)
+  // só começa quando a pessoa disser que quer orçamento. Protege quem já fechou,
+  // fornecedor e assessoria, que a lista de contatos não cobre (100+).
+  comoPosso: 'Olá, tudo bem? Como posso ajudar?',
 
   perguntaQualificadora:
     'Para orçamento, você poderia me informar a data e o ano do evento ' +
@@ -55,37 +56,39 @@ export const MSG = {
     return `${base} Se ainda não decidiu o dia, me diz só o ano (2027 ou 2028) que já sigo com o orçamento.`;
   },
 
-  // Texto literal da Raquel, quebrado em duas mensagens (anúncio + descrição) para
-  // não chegar como um paredão único. O PDF entra entre as duas. NÃO reescrever a
-  // copy: só a divisão muda.
-  orcamentoNormalAnuncio: 'Certo, segue PDF com orçamento:',
-  orcamentoNormalDescricao:
-    'Oferecemos aos clientes 8hrs de evento.\n' +
-    'Também incluímos no aluguel mesas e cadeiras para até 200 convidados, ' +
-    '2 funcionários no dia do evento, luz de palco e pista, alguns móveis ' +
-    'rústicos para compor a decoração, três opções de áreas de cerimônia, ' +
-    'além de dois salões de festa.\n' +
-    'Não temos Buffet e nem decoração inclusa.',
+  // Proposta normal: a mensagem de ano (literal da Raquel) antecede o PDF do ano.
+  // A descrição de inclusos saiu: vive dentro do PDF.
+  propostaAno: (ano: number): string =>
+    `Vou te enviar nossa proposta para casamentos em ${ano}, especialmente preparada ` +
+    `para que os noivos possam vivenciar uma experiência única no Saint Jardin.\n` +
+    `Nosso foco como espaço é o Destination Wedding para que o sonho de vocês não se ` +
+    `limite em apenas uma noite!`,
 
   ofertaMini:
     'Temos propostas de mini wedding para evento de até 80 convidados em dia ' +
     'de semana (segunda a quinta-feira, exceto feriados ou vésperas). Teria ' +
     'interesse em receber?',
 
-  // O mini wedding agora tem PDF próprio (2027 e 2028 na mesma proposta), então o
-  // preço e os detalhes vivem no arquivo, não na mensagem. Aqui vai só o anúncio
-  // curto que antecede o PDF, no mesmo formato do orçamento normal.
+  // O mini wedding tem PDF próprio (2027 e 2028 na mesma proposta), então o
+  // preço e os detalhes vivem no arquivo. Anúncio curto que antecede o PDF.
   orcamentoMiniAnuncio: 'Certo, segue PDF com o orçamento do mini wedding:',
 
-  conviteVisita:
-    'Vamos agendar um dia para você conhecer nossa estrutura e analisar a ' +
-    'experiência que oferecemos no Saint Jardin?',
+  // A pessoa não disse sim nem não à oferta do mini (perguntou preço, o que
+  // inclui, "vou ver com meu noivo"): manda o PDF com as informações.
+  miniInformacoes: 'Segue nosso PDF de mini wedding com as informações:',
 
-  // Visita de noiva: PRIMEIRO só pergunta o melhor dia/horário para a noiva
-  // (sem prometer a agenda ainda). Só DEPOIS que ela responde é que a Raquel
-  // diz que vai verificar a própria agenda (visitaVouRetornar).
+  // A pessoa recusou o mini: pergunta se pode mandar as propostas tradicionais
+  // (que incluem final de semana). Se aceitar, vai o PDF do ano pedido.
+  ofertaTradicional:
+    'Podemos então enviar nossas propostas tradicionais que incluem o final de semana também?',
+
+  // Convite de visita (texto literal da Raquel): diz quando há visita e pergunta o
+  // dia. Carrega regra de horário, então vai literal (nunca humanizada).
+  // Só sai quando a pessoa aceita ou pede a visita (ou responde ao follow-up).
   perguntaPreferenciaVisita:
-    'Você tem algum dia ou horário de preferência para fazer a visita?',
+    'Realizamos visitas de segunda a sexta-feira, em horário comercial, e aos ' +
+    'sábados, das 8h às 13h.\n' +
+    'Que dia ficará melhor para vocês?',
 
   // A noiva NÃO deu um dia/horário fechado (só preferência ou deixou em aberto). O
   // bot não tem acesso ao calendário, então NÃO promete "esse dia": diz que vai ver
@@ -161,10 +164,14 @@ export const MSG = {
     'Ah, essa data já passou! Qual data você pensou, mais pra frente? 😊',
   ],
 
-  // Placeholder: o Matheus troca depois pelo texto real da Raquel.
+  // Follow-up 12h depois da proposta, se a pessoa não escreveu (texto literal da
+  // Raquel, 14/10/2026). Faz o papel do convite de visita, que saiu da proposta.
   followUp:
-    'Oi! Passando pra saber se ficou alguma dúvida sobre o Saint Jardin. ' +
-    'Posso te ajudar a garantir sua data? ☺️',
+    'Oie! Ficou alguma dúvida sobre nossa proposta? 🥰\n\n' +
+    'Tenho certeza de que o Saint Jardin irá surpreender vocês ainda mais ' +
+    'pessoalmente! ✨ A visita também é uma ótima oportunidade para conversarmos ' +
+    'sobre os detalhes e possibilidades de adequar a proposta ao que vocês desejam.\n\n' +
+    'Vamos agendar uma visita para conhecer nosso espaço? Será um prazer receber vocês!',
 
   // Transcrição do áudio falhou (Gemini indisponível, rate limit, formato etc.).
   // Diz o que houve e o próximo passo, sem termos técnicos e sem culpar a noiva.

@@ -78,6 +78,8 @@ export function classificarDia(slots: Slots): PreferenciaDia | undefined {
  * semana com mais de 80, vão para o valor normal — não se enquadram no mini.
  */
 export function ehMiniWedding(slots: Slots): boolean {
+  // Já recusou o mini e aceitou as propostas tradicionais: não oferece de novo.
+  if (slots.tradicionalAceito) return false;
   const dia = classificarDia(slots);
   const cabeNoMini =
     slots.convidados !== undefined && slots.convidados <= LIMITE_MINI_WEDDING;
@@ -157,6 +159,7 @@ export function mesclarSlots(atual: Slots, novo: Slots): Slots {
     nome: novo.nome ?? atual.nome,
     // Controle interno do aviso de data ocupada: só o próprio bot escreve aqui.
     dataOcupadaAvisada: novo.dataOcupadaAvisada ?? atual.dataOcupadaAvisada,
+    tradicionalAceito: novo.tradicionalAceito ?? atual.tradicionalAceito,
   };
 }
 
@@ -311,17 +314,33 @@ function dataBR(dataISO: string): string {
   return `${d}/${m}/${y}`;
 }
 
-/** Proposta normal do ano (anúncio + PDF + descrição + convite de visita). */
+/**
+ * Marca a proposta como enviada agora. É o ponto de partida do follow-up de 12h
+ * (uma proposta nova, por ex. de outro ano, reinicia a contagem).
+ */
+function propostaEnviada(base: Conversa): Conversa {
+  return {
+    ...base,
+    estado: 'proposta_enviada',
+    propostaEnviadaEm: base.atualizadoEm,
+    followupEnviadoEm: undefined,
+  };
+}
+
+/**
+ * Proposta normal do ano: mensagem de ano + PDF. O convite de visita não sai
+ * aqui: vai no follow-up de 12h se a pessoa não responder.
+ */
 function enviarPropostaNormal(base: Conversa, ano: Ano): ResultadoDecisao {
   return {
-    conversa: { ...base, estado: 'proposta_enviada' },
-    saidas: [
-      texto(MSG.orcamentoNormalAnuncio),
-      { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
-      texto(MSG.orcamentoNormalDescricao),
-      pergunta(MSG.conviteVisita),
-    ],
+    conversa: propostaEnviada(base),
+    saidas: [texto(MSG.propostaAno(ano)), { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) }],
   };
+}
+
+/** Abertura do atendimento comercial: mensagem da Raquel + vídeo de apresentação. */
+function abertura(): MensagemSaida[] {
+  return [texto(MSG.abertura), { tipo: 'video', video: 'apresentacao' }];
 }
 
 type ChecagemDisponibilidade =
@@ -538,7 +557,7 @@ function qualificar(
     if (nlu.intencao === 'agendar_visita' && !temDadoDeOrcamento(slots)) {
       return {
         conversa: { ...base, estado: 'aguardando_pref_visita' },
-        saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
+        saidas: [texto(MSG.perguntaPreferenciaVisita)],
       };
     }
     return {
@@ -575,7 +594,16 @@ export function decidir(
     ...nlu.slots,
     nome: nlu.nomeDetectado ?? undefined,
   });
-  const base: Conversa = { ...conversa, slots, atualizadoEm: ctx.agora };
+  const base: Conversa = {
+    ...conversa,
+    slots,
+    atualizadoEm: ctx.agora,
+    ultimaEntradaEm: ctx.agora,
+  };
+
+  // Antes do fluxo comercial começar (nada foi enviado ainda): 'novo' e a espera
+  // pelo assunto depois de um cumprimento.
+  const primeiroContato = conversa.estado === 'novo' || conversa.estado === 'aguardando_assunto';
 
   const handoff = (motivo: string): ResultadoDecisao => ({
     conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
@@ -621,64 +649,70 @@ export function decidir(
   }
 
   // Intenções que exigem humano (negociar, fora do script, cliente fechado) têm
-  // prioridade, exceto na primeira saudação (apresentamos o espaço antes). A
-  // visita de noiva NÃO é handoff: é coletada no fluxo (ver casos abaixo).
+  // prioridade, exceto no primeiro contato (tratado logo abaixo). A visita de
+  // noiva NÃO é handoff: é coletada no fluxo (ver casos abaixo).
   const motivo = motivoDaIntencao(nlu.intencao);
-  if (motivo && conversa.estado !== 'novo') {
+  if (motivo && !primeiroContato) {
     return handoff(motivo);
   }
   // No primeiro contato, "cliente já fechado" transborda em silêncio; dúvida
-  // fora do script ou negociação apresenta o espaço E repassa a pergunta pra
-  // Raquel — antes a pergunta era engolida (o bot respondia só com a
-  // qualificação e a dúvida morria sem resposta).
-  if (conversa.estado === 'novo' && nlu.intencao === 'cliente_fechado') {
+  // fora do script ou negociação avisa que vai verificar e repassa a pergunta
+  // pra Raquel. O vídeo só vai se a mensagem também trouxe dado de orçamento:
+  // quem escreve de outro assunto (cliente, assessoria, dúvida) não recebe o
+  // fluxo comercial.
+  if (primeiroContato && nlu.intencao === 'cliente_fechado') {
     return handoff('cliente que já fechou');
   }
   if (
-    conversa.estado === 'novo' &&
+    primeiroContato &&
     motivo &&
     (nlu.intencao === 'fora_do_script' || nlu.intencao === 'negociar')
   ) {
     return {
       conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
       saidas: [
-        texto(MSG.apresentacao(slots.nome)),
-        { tipo: 'pdf', pdf: 'apresentacao' },
+        ...(temDadoDeOrcamento(slots) ? abertura() : []),
         pergunta(MSG.duvidaVouVerificar),
       ],
     };
   }
 
   switch (conversa.estado) {
-    case 'novo': {
-      // Primeiro contato: saudação (com o nome, ou pedindo o nome) + apresentação
-      // em PDF. A saudação já personaliza/pede o nome; a apresentação nunca é
-      // humanizada (texto de marca literal).
-      const apresentacao: MensagemSaida[] = [
-        texto(MSG.apresentacao(slots.nome)),
-        { tipo: 'pdf', pdf: 'apresentacao' },
-      ];
+    case 'novo':
+    case 'aguardando_assunto': {
+      // Só um cumprimento ("oi", "bom dia"): não inicia o fluxo comercial. Pergunta
+      // como pode ajudar e espera o assunto. Se a pessoa cumprimentar de novo
+      // enquanto espera, fica quieta (já perguntou).
+      if (nlu.intencao === 'saudacao' && !temDadoDeOrcamento(slots)) {
+        if (conversa.estado === 'aguardando_assunto') return { conversa: base, saidas: [] };
+        return {
+          conversa: { ...base, estado: 'aguardando_assunto' },
+          saidas: [texto(MSG.comoPosso)],
+        };
+      }
 
+      // Pediu orçamento (ou falou de outra coisa que cabe no fluxo): abertura da
+      // Raquel + vídeo. A abertura nunca é humanizada (texto de marca literal).
       // Inclui as partes soltas de data (mesDia/mes/dia): quem abre com "quero
       // orçamento pra 26 de janeiro" não pode receber a qualificadora pedindo a
       // data de novo.
       const jaVeioAlgumDado = temDadoDeOrcamento(slots);
 
-      // Só quer conhecer o espaço (sem dados de orçamento): apresenta e já vai
+      // Só quer conhecer o espaço (sem dados de orçamento): abre e já vai
       // para a preferência de visita, em vez de pedir dados de orçamento.
       if (nlu.intencao === 'agendar_visita' && !jaVeioAlgumDado) {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
-          saidas: [...apresentacao, pergunta(MSG.perguntaPreferenciaVisita)],
+          saidas: [...abertura(), texto(MSG.perguntaPreferenciaVisita)],
         };
       }
 
-      // Nada foi adiantado ainda: abertura padrão, pergunta qualificadora LITERAL
-      // (texto oficial da Raquel, não humanizado) pedindo tudo de uma vez.
+      // Nada foi adiantado ainda: pergunta qualificadora LITERAL (texto oficial
+      // da Raquel, não humanizado) pedindo tudo de uma vez.
       if (!jaVeioAlgumDado) {
         return {
           conversa: { ...base, estado: 'aguardando_qualificacao' },
-          saidas: [...apresentacao, texto(MSG.perguntaQualificadora)],
+          saidas: [...abertura(), texto(MSG.perguntaQualificadora)],
         };
       }
 
@@ -687,7 +721,7 @@ export function decidir(
       // mesma lógica de 'aguardando_qualificacao' — pergunta só o que falta, ou já
       // avança para a oferta/proposta se veio tudo.
       const seguinte = qualificar({ ...base, estado: 'aguardando_qualificacao' }, slots, nlu, ctx);
-      return { conversa: seguinte.conversa, saidas: [...apresentacao, ...seguinte.saidas] };
+      return { conversa: seguinte.conversa, saidas: [...abertura(), ...seguinte.saidas] };
     }
 
     case 'aguardando_qualificacao':
@@ -727,23 +761,56 @@ export function decidir(
           );
         }
         return {
-          conversa: { ...base, slots: checagem.slots, estado: 'proposta_enviada' },
-          saidas: [
-            texto(MSG.orcamentoMiniAnuncio),
-            { tipo: 'pdf', pdf: 'proposta_mini' },
-            pergunta(MSG.conviteVisita),
-          ],
+          conversa: propostaEnviada({ ...base, slots: checagem.slots }),
+          saidas: [texto(MSG.orcamentoMiniAnuncio), { tipo: 'pdf', pdf: 'proposta_mini' }],
         };
       }
-      // Recusou o mini de propósito: respeita e encerra (não empurra visita).
+      // Recusou o mini: pergunta se pode mandar as propostas tradicionais (que
+      // incluem final de semana). Regra da Raquel, 14/10/2026.
+      if (nlu.negativo) {
+        return {
+          conversa: { ...base, estado: 'aguardando_aceite_tradicional' },
+          saidas: [texto(MSG.ofertaTradicional)],
+        };
+      }
+      // Quer conhecer o espaço em vez de responder à oferta: vai para a visita.
+      if (nlu.intencao === 'agendar_visita') {
+        return {
+          conversa: { ...base, estado: 'aguardando_pref_visita' },
+          saidas: [texto(MSG.perguntaPreferenciaVisita)],
+        };
+      }
+      // Sem sim/não claro (perguntou o valor, o que inclui, "vou ver com meu
+      // noivo"): manda o PDF do mini com as informações, em vez de insistir.
+      return {
+        conversa: propostaEnviada(base),
+        saidas: [texto(MSG.miniInformacoes), { tipo: 'pdf', pdf: 'proposta_mini' }],
+      };
+
+    case 'aguardando_aceite_tradicional':
+      // Disse sim, ou respondeu com um dado (o ano, uma data): quer as propostas
+      // tradicionais. Marca a recusa do mini e segue a qualificação normal, que
+      // agora não oferece o mini de novo (pergunta o ano/data se faltar).
+      if (nlu.afirmativo || trouxeDadoDeOrcamento(nlu)) {
+        const comRecusa: Slots = { ...slots, tradicionalAceito: true };
+        return qualificar(
+          { ...base, slots: comRecusa, estado: 'aguardando_qualificacao' },
+          comRecusa,
+          nlu,
+          ctx,
+        );
+      }
       if (nlu.negativo) {
         return encerrar();
       }
-      // Sem sim/não claro: convida para a visita (um único convite).
-      return {
-        conversa: { ...base, estado: 'proposta_enviada' },
-        saidas: [pergunta(MSG.conviteVisita)],
-      };
+      if (nlu.intencao === 'agendar_visita') {
+        return {
+          conversa: { ...base, estado: 'aguardando_pref_visita' },
+          saidas: [texto(MSG.perguntaPreferenciaVisita)],
+        };
+      }
+      // Sem sinal claro: fica quieta, ela segue de onde parou.
+      return { conversa: base, saidas: [] };
 
     case 'proposta_enviada':
       // A noiva voltou com dados novos (outro ano, outra data, outro nº de
@@ -751,13 +818,15 @@ export function decidir(
       if (trouxeDadoDeOrcamento(nlu)) {
         return decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
       }
-      // Orçamento já foi e o único convite em aberto é a visita. Um "sim/vamos"
-      // é aceite: pergunta a preferência de dia e, na resposta, repassa para a
-      // Raquel marcar (ADR-0005 rev.: o bot não agenda a visita de noiva).
-      if (nlu.afirmativo || nlu.intencao === 'agendar_visita') {
+      // Pedido explícito de visita ("quero conhecer") sempre vale. Já um "sim" ou
+      // "ok" solto só é aceite do convite DEPOIS do follow-up: a proposta não traz
+      // mais convite, então um "ok, obrigada" logo após o PDF não é um "sim, quero
+      // visitar". Aceite: pergunta o dia e, na resposta, repassa para a Raquel
+      // marcar (ADR-0005 rev.: o bot não agenda a visita de noiva).
+      if (nlu.intencao === 'agendar_visita' || (nlu.afirmativo && conversa.followupEnviadoEm)) {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
-          saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
+          saidas: [texto(MSG.perguntaPreferenciaVisita)],
         };
       }
       // Recusou a visita de propósito: agradece UMA vez e encerra. É o fim do
@@ -813,7 +882,7 @@ export function decidir(
       if (nlu.intencao === 'agendar_visita') {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
-          saidas: [pergunta(MSG.perguntaPreferenciaVisita)],
+          saidas: [texto(MSG.perguntaPreferenciaVisita)],
         };
       }
       // Nada concreto (um "ok", "não", agradecimento, silêncio): fica quieto.

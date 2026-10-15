@@ -15,7 +15,7 @@ import {
   SandboxProvider,
 } from '../adapters/memory';
 import { processarMensagem, type Deps } from '../app/orchestrator';
-import { PDF_CATALOGO } from '../domain/pdfs';
+import { PDF_CATALOGO, VIDEO_CATALOGO } from '../domain/pdfs';
 import type { MensagemSaida } from '../domain/types';
 
 function out(linha: string): void {
@@ -26,6 +26,8 @@ function render(saidas: MensagemSaida[]): void {
   for (const s of saidas) {
     if (s.tipo === 'pdf' && s.pdf) {
       out(`   Raquel 📎 [PDF: ${PDF_CATALOGO[s.pdf].arquivo}]`);
+    } else if (s.tipo === 'video' && s.video) {
+      out(`   Raquel 🎬 [VÍDEO: ${VIDEO_CATALOGO[s.video].arquivo}]`);
     } else {
       out(`   Raquel 💬 ${s.texto}`);
     }

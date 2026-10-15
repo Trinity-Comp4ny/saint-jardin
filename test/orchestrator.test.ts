@@ -44,9 +44,12 @@ describe('conversa completa pelo orquestrador', () => {
     const r = await processarMensagem(NOIVA, 'umas 200 pessoas em 2027', deps);
 
     expect(r.conversa.estado).toBe('proposta_enviada');
+    // Vídeo de apresentação na abertura e o PDF do ano na proposta.
+    expect(todasSaidas().filter((s) => s.tipo === 'video').map((v) => v.video)).toEqual(['apresentacao']);
     const pdfs = todasSaidas().filter((s) => s.tipo === 'pdf');
-    expect(pdfs.map((p) => p.pdf)).toContain('apresentacao');
-    expect(pdfs.map((p) => p.pdf)).toContain('proposta_2027');
+    expect(pdfs.map((p) => p.pdf)).toEqual(['proposta_2027']);
+    // A proposta marca o início do follow-up de 12h.
+    expect(r.conversa.propostaEnviadaEm).toBe('2026-07-21T12:00:00.000Z');
   });
 
   it('extrai convidados e ano de uma data completa dd/mm/yyyy', async () => {
@@ -56,6 +59,26 @@ describe('conversa completa pelo orquestrador', () => {
     expect(r.conversa.slots.ano).toBe(2027);
     expect(r.conversa.slots.convidados).toBe(150);
     expect(todasSaidas().at(-1)?.texto).toMatch(/reservada/);
+  });
+});
+
+describe('primeira mensagem: cumprimento antes do pedido', () => {
+  it('"oi" sozinho: pergunta como pode ajudar, sem vídeo; o pedido de orçamento inicia o fluxo', async () => {
+    const r1 = await processarMensagem(NOIVA, 'Oi, tudo bem?', deps);
+    expect(r1.conversa.estado).toBe('aguardando_assunto');
+    expect(r1.saidas.map((s) => s.texto)).toEqual(['Olá, tudo bem? Como posso ajudar?']);
+
+    const r2 = await processarMensagem(NOIVA, 'queria saber os valores para casamento', deps);
+    expect(r2.conversa.estado).toBe('aguardando_qualificacao');
+    expect(r2.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
+  });
+
+  it('"bom dia" seguido de uma dúvida que não é orçamento vai para a Raquel sem vídeo', async () => {
+    await processarMensagem(NOIVA, 'Bom dia', deps);
+    // "sou cliente de vocês": o MockNLU lê como cliente fechado -> silêncio e handoff
+    const r = await processarMensagem(NOIVA, 'sou cliente de vocês, queria ver uma coisa', deps);
+    expect(r.conversa.estado).toBe('handoff');
+    expect(todasSaidas().some((s) => s.tipo === 'video')).toBe(false);
   });
 });
 

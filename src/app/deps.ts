@@ -19,8 +19,8 @@ import {
   SupabaseMensagemRepo,
   criarSupabase,
 } from '../adapters/supabase';
-import { PDF_CATALOGO } from '../domain/pdfs';
-import type { TipoPdf } from '../domain/types';
+import { PDF_CATALOGO, VIDEO_CATALOGO } from '../domain/pdfs';
+import type { TipoPdf, TipoVideo } from '../domain/types';
 import type { EventStore, Fila, Notifier, Transcriber } from '../ports';
 import type { Deps } from './orchestrator';
 
@@ -90,6 +90,14 @@ export function montarProcessDeps(): ProcessAppDeps {
         .from(BUCKET_PDF)
         .createSignedUrl(arquivo, 60 * 10);
       if (error || !data) throw new Error(`signed url do PDF ${tipo}: ${error?.message}`);
+      return data.signedUrl;
+    },
+    resolverVideoUrl: async (tipo: TipoVideo) => {
+      const arquivo = VIDEO_CATALOGO[tipo].arquivo;
+      const { data, error } = await db.storage
+        .from(BUCKET_PDF)
+        .createSignedUrl(arquivo, 60 * 10);
+      if (error || !data) throw new Error(`signed url do vídeo ${tipo}: ${error?.message}`);
       return data.signedUrl;
     },
     // Deixa o "digitando…" visível por um instante antes da primeira resposta.

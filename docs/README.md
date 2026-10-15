@@ -15,12 +15,15 @@ Responsável técnico: **Matheus**.
 
 ### 02 — Spec
 - [MVP Fase 1](02-spec/mvp-fase-1.md) — chatbot de primeiro atendimento
+- [Fluxo v2 (14/10/2026)](02-spec/fluxo-v2.md): vídeo, propostas por ano, follow-up de 12h
+- [Perguntas para a Raquel (14/10/2026)](02-spec/perguntas-raquel-2026-10-14.md)
 
 ### 03 — ADRs (decisões de arquitetura)
 - [ADR-0001 — API do WhatsApp](03-adr/0001-whatsapp-api.md)
 - [ADR-0002 — Calendário dedicado para disponibilidade](03-adr/0002-calendario-dedicado.md)
 - [ADR-0003 — Dados estruturados desde o dia 1](03-adr/0003-dados-estruturados-plataforma.md)
 - [ADR-0004 — Arquitetura do sistema](03-adr/0004-arquitetura.md)
+- [ADR-0010: fluxo v2, vídeo, filtro de primeiro contato e follow-up de 12h](03-adr/0010-fluxo-v2-video-primeiro-contato-followup.md)
 
 ## Estado atual
 

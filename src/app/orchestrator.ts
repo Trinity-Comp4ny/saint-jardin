@@ -224,8 +224,8 @@ export async function processarMensagem(
         await deps.mensagens?.registrar(
           telefone,
           'saida',
-          s.tipo === 'pdf' ? 'pdf' : 'texto',
-          s.tipo === 'pdf' ? (s.pdf ?? '') : (s.texto ?? ''),
+          s.tipo === 'pdf' ? 'pdf' : s.tipo === 'video' ? 'video' : 'texto',
+          s.tipo === 'pdf' ? (s.pdf ?? '') : s.tipo === 'video' ? (s.video ?? '') : (s.texto ?? ''),
         );
       } catch {
         // Só o histórico fica incompleto.

@@ -65,6 +65,29 @@ export class InMemoryConversaRepo implements ConversaRepository {
   async salvar(conversa: Conversa): Promise<void> {
     this.mapa.set(conversa.telefone, conversa);
   }
+
+  async pendentesDeFollowup(desdeISO: string, ateISO: string): Promise<Conversa[]> {
+    return [...this.mapa.values()].filter(
+      (c) =>
+        c.estado === 'proposta_enviada' &&
+        !c.followupEnviadoEm &&
+        c.propostaEnviadaEm !== undefined &&
+        c.propostaEnviadaEm >= desdeISO &&
+        c.propostaEnviadaEm <= ateISO,
+    );
+  }
+
+  async reivindicarFollowup(telefone: string, agoraISO: string): Promise<boolean> {
+    const c = this.mapa.get(telefone);
+    if (!c || c.estado !== 'proposta_enviada' || c.followupEnviadoEm) return false;
+    this.mapa.set(telefone, { ...c, followupEnviadoEm: agoraISO });
+    return true;
+  }
+
+  async liberarFollowup(telefone: string): Promise<void> {
+    const c = this.mapa.get(telefone);
+    if (c) this.mapa.set(telefone, { ...c, followupEnviadoEm: undefined });
+  }
 }
 
 export class MockCalendario implements Calendario {
