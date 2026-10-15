@@ -8,6 +8,7 @@ import {
   LIMITE_MINI_WEDDING,
   type Ano,
   type Conversa,
+  type DiaSemana,
   type EntradaNLU,
   type MensagemSaida,
   type PreferenciaDia,
@@ -57,19 +58,25 @@ export function novaConversa(telefone: string, agora: string): Conversa {
 }
 
 /** Classifica o dia em fim de semana (valor cheio) ou dia de semana (mini). */
+/** Classe do dia da semana: segunda a quinta é "dia de semana"; sexta a domingo, valor cheio. */
+function classeDoDia(d: DiaSemana): PreferenciaDia {
+  return DIAS_DE_SEMANA.includes(d) ? 'dia_de_semana' : 'fim_de_semana';
+}
+
+/** Classe do dia do calendário de uma data ISO (YYYY-MM-DD). */
+function classeDaData(dataISO: string): PreferenciaDia {
+  const [y, m, d] = dataISO.slice(0, 10).split('-').map(Number);
+  const dow = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1).getDay(); // 0=dom ... 6=sáb
+  return dow >= 1 && dow <= 4 ? 'dia_de_semana' : 'fim_de_semana';
+}
+
 export function classificarDia(slots: Slots): PreferenciaDia | undefined {
   // A data concreta manda: se sabemos o dia do calendário, o dia da semana sai
   // dela. Sem isso, quem dizia "dia de semana" e depois dava uma data de sábado
   // recebia proposta de mini wedding para um sábado (e vice-versa).
   const dataISO = dataCompleta(slots);
-  if (dataISO) {
-    const [y, m, d] = dataISO.split('-').map(Number);
-    const dow = new Date(y ?? 0, (m ?? 1) - 1, d ?? 1).getDay(); // 0=dom ... 6=sáb
-    return dow >= 1 && dow <= 4 ? 'dia_de_semana' : 'fim_de_semana';
-  }
-  if (slots.diaSemana) {
-    return DIAS_DE_SEMANA.includes(slots.diaSemana) ? 'dia_de_semana' : 'fim_de_semana';
-  }
+  if (dataISO) return classeDaData(dataISO);
+  if (slots.diaSemana) return classeDoDia(slots.diaSemana);
   return slots.preferenciaDia;
 }
 
@@ -154,14 +161,37 @@ export function mesclarSlots(atual: Slots, novo: Slots): Slots {
     }
   }
 
+  let diaSemana = novo.diaSemana ?? atual.diaSemana;
+  let preferenciaDia = novo.preferenciaDia ?? atual.preferenciaDia;
+
+  // Um dia da semana ou uma preferência NOVOS que contradizem o que ficou de antes
+  // substituem o antigo. Sem isso, "não, prefiro sábado" (o modelo às vezes devolve só
+  // a preferência "fim de semana") deixava a "quarta" antiga mandando na classificação
+  // e o bot seguia oferecendo mini wedding para quem acabou de pedir sábado.
+  const classeNova: PreferenciaDia | undefined = novo.diaSemana
+    ? classeDoDia(novo.diaSemana)
+    : novo.preferenciaDia;
+  if (classeNova) {
+    if (!novo.diaSemana && diaSemana && classeDoDia(diaSemana) !== classeNova) diaSemana = undefined;
+    // O dia da semana novo é mais específico que a preferência genérica antiga.
+    if (novo.diaSemana && !novo.preferenciaDia) preferenciaDia = undefined;
+    // Uma data completa antiga que cai na outra classe também fica velha (ano é mantido).
+    if (!trouxeParteDeData && data && classeDaData(data) !== classeNova) {
+      data = undefined;
+      mesDia = undefined;
+      mes = undefined;
+      dia = undefined;
+    }
+  }
+
   return {
     data,
     mesDia,
     mes,
     dia,
     ano,
-    diaSemana: novo.diaSemana ?? atual.diaSemana,
-    preferenciaDia: novo.preferenciaDia ?? atual.preferenciaDia,
+    diaSemana,
+    preferenciaDia,
     convidados: novo.convidados ?? atual.convidados,
     nome: novo.nome ?? atual.nome,
     // Controle interno do aviso de data ocupada: só o próprio bot escreve aqui.
