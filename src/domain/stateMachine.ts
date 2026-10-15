@@ -338,9 +338,16 @@ function enviarPropostaNormal(base: Conversa, ano: Ano): ResultadoDecisao {
   };
 }
 
-/** Abertura do atendimento comercial: mensagem da Raquel + vídeo de apresentação. */
-function abertura(): MensagemSaida[] {
-  return [texto(MSG.abertura), { tipo: 'video', video: 'apresentacao' }];
+/**
+ * Abertura do atendimento comercial: mensagem da Raquel + vídeo de apresentação.
+ * `jaCumprimentou`: o bot já disse "Olá, tudo bem?" na mensagem anterior (o "como
+ * posso ajudar"), então a abertura vai sem a saudação, para não repeti-la.
+ */
+function abertura(jaCumprimentou = false): MensagemSaida[] {
+  return [
+    texto(jaCumprimentou ? MSG.aberturaSemSaudacao : MSG.abertura),
+    { tipo: 'video', video: 'apresentacao' },
+  ];
 }
 
 type ChecagemDisponibilidade =
@@ -671,7 +678,7 @@ export function decidir(
     return {
       conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
       saidas: [
-        ...(temDadoDeOrcamento(slots) ? abertura() : []),
+        ...(temDadoDeOrcamento(slots) ? abertura(conversa.estado === 'aguardando_assunto') : []),
         pergunta(MSG.duvidaVouVerificar),
       ],
     };
@@ -697,13 +704,15 @@ export function decidir(
       // orçamento pra 26 de janeiro" não pode receber a qualificadora pedindo a
       // data de novo.
       const jaVeioAlgumDado = temDadoDeOrcamento(slots);
+      // Depois do "como posso ajudar" o bot já cumprimentou: a abertura vai sem saudação.
+      const aberturaMsgs = abertura(conversa.estado === 'aguardando_assunto');
 
       // Só quer conhecer o espaço (sem dados de orçamento): abre e já vai
       // para a preferência de visita, em vez de pedir dados de orçamento.
       if (nlu.intencao === 'agendar_visita' && !jaVeioAlgumDado) {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
-          saidas: [...abertura(), texto(MSG.perguntaPreferenciaVisita)],
+          saidas: [...aberturaMsgs, texto(MSG.perguntaPreferenciaVisita)],
         };
       }
 
@@ -712,7 +721,7 @@ export function decidir(
       if (!jaVeioAlgumDado) {
         return {
           conversa: { ...base, estado: 'aguardando_qualificacao' },
-          saidas: [...abertura(), texto(MSG.perguntaQualificadora)],
+          saidas: [...aberturaMsgs, texto(MSG.perguntaQualificadora)],
         };
       }
 
@@ -721,7 +730,7 @@ export function decidir(
       // mesma lógica de 'aguardando_qualificacao' — pergunta só o que falta, ou já
       // avança para a oferta/proposta se veio tudo.
       const seguinte = qualificar({ ...base, estado: 'aguardando_qualificacao' }, slots, nlu, ctx);
-      return { conversa: seguinte.conversa, saidas: [...abertura(), ...seguinte.saidas] };
+      return { conversa: seguinte.conversa, saidas: [...aberturaMsgs, ...seguinte.saidas] };
     }
 
     case 'aguardando_qualificacao':

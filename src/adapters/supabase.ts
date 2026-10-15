@@ -152,13 +152,19 @@ export class SupabaseMensagemRepo implements MensagemRepo {
   }
 
   async historico(telefone: string, limite: number): Promise<MensagemLog[]> {
-    // Pega as últimas `limite` (ordem desc pelo índice) e devolve cronológico.
-    const { data, error } = await this.db
-      .from('mensagens')
-      .select('direcao, tipo, conteudo, criado_em')
-      .eq('telefone', telefone)
-      .order('criado_em', { ascending: false })
-      .limit(limite);
+    // Pega as últimas `limite` (ordem desc pelo índice) e devolve cronológico,
+    // ignorando o que o #reset arquivou.
+    const consulta = (apenasAtivas: boolean) => {
+      let q = this.db
+        .from('mensagens')
+        .select('direcao, tipo, conteudo, criado_em')
+        .eq('telefone', telefone);
+      if (apenasAtivas) q = q.eq('arquivada', false);
+      return q.order('criado_em', { ascending: false }).limit(limite);
+    };
+    let { data, error } = await consulta(true);
+    // Migration 0007 ainda não rodou (coluna `arquivada` ausente): lê sem o filtro.
+    if (error) ({ data, error } = await consulta(false));
     // Best-effort: o histórico é contexto, não pode derrubar o turno.
     if (error || !data) return [];
     return data
@@ -173,7 +179,14 @@ export class SupabaseMensagemRepo implements MensagemRepo {
 
   async limpar(telefone: string): Promise<void> {
     // Best-effort: usado pelo #reset de teste; uma falha aqui não derruba o turno.
-    await this.db.from('mensagens').delete().eq('telefone', telefone);
+    // Arquiva (a conversa fica no banco para análise). Sem a coluna `arquivada`
+    // (migration 0007 pendente), cai no comportamento antigo: apagar.
+    const { error } = await this.db
+      .from('mensagens')
+      .update({ arquivada: true })
+      .eq('telefone', telefone)
+      .eq('arquivada', false);
+    if (error) await this.db.from('mensagens').delete().eq('telefone', telefone);
   }
 }
 

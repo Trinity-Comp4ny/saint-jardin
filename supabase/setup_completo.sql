@@ -43,9 +43,12 @@ create table if not exists mensagens (
   direcao   text not null check (direcao in ('entrada','saida')),
   tipo      text not null default 'texto' check (tipo in ('texto','pdf','audio','video')),
   conteudo  text,
-  criado_em timestamptz not null default now()
+  criado_em timestamptz not null default now(),
+  -- #reset de teste arquiva em vez de apagar (migration 0007).
+  arquivada boolean not null default false
 );
 create index if not exists mensagens_telefone_idx on mensagens (telefone, criado_em);
+create index if not exists mensagens_ativas_idx on mensagens (telefone, criado_em) where not arquivada;
 
 -- ===== Handoffs (watchdog: re-alerta se ninguém responder) =====
 create table if not exists handoffs (

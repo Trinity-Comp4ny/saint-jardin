@@ -131,7 +131,12 @@ export class InMemoryMensagemRepo implements MensagemRepo {
     return arr.slice(-limite);
   }
 
+  /** Mensagens que o #reset arquivou (não entram no histórico ativo). */
+  public arquivadas = new Map<string, MensagemLog[]>();
+
   async limpar(telefone: string): Promise<void> {
+    const ativas = this.porTelefone.get(telefone) ?? [];
+    this.arquivadas.set(telefone, [...(this.arquivadas.get(telefone) ?? []), ...ativas]);
     this.porTelefone.delete(telefone);
   }
 }

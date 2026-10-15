@@ -2,6 +2,7 @@
 // disponibilidade de data, a decisão da máquina de estados e os efeitos
 // colaterais (enviar mensagens, alertar handoff, persistir).
 
+import { temConversaSocial, respostaDoRedatorAceitavel } from '../domain/verniz';
 import { dataCompleta, decidir, mesclarSlots, novaConversa, type ContextoDecisao } from '../domain/stateMachine';
 import type { Conversa, MensagemSaida } from '../domain/types';
 import type {
@@ -71,14 +72,18 @@ async function humanizarSaidas(
       // Se um texto (ex.: a apresentação, que já saúda) veio antes nesta mesma
       // rajada, a pergunta humanizada não deve saudar de novo (evita "olá" duplo).
       const jaSaudou = saidas.slice(0, i).some((a) => a.tipo === 'texto');
-      const texto = await deps.redator!.humanizar({
+      // Sem conversa social na mensagem da pessoa não há o que o Redator responder:
+      // a pergunta vai literal (sem "Legal!", sem muleta de fala).
+      if (!temConversaSocial(mensagemCliente)) return s;
+      const reescrito = await deps.redator!.humanizar({
         objetivo: s.texto,
         mensagemCliente,
         jaSaudou,
         historico,
         nome,
       });
-      return { ...s, texto };
+      // Rede determinística: interjeição, gíria ou número inventado volta ao literal.
+      return { ...s, texto: respostaDoRedatorAceitavel(s.texto, reescrito) ? reescrito : s.texto };
     }),
   );
 }

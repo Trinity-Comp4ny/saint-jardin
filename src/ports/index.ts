@@ -127,9 +127,10 @@ export interface MensagemRepo {
    */
   historico(telefone: string, limite: number): Promise<MensagemLog[]>;
   /**
-   * Apaga o histórico do telefone. Usado pelo comando de teste `#reset`: sem isso,
-   * a NLU/Redator releem os turnos antigos e ressuscitam dados já zerados (ex.: o
-   * nome da noiva). Best-effort.
+   * Tira o histórico do telefone do contexto ativo. Usado pelo comando de teste
+   * `#reset`: sem isso, a NLU/Redator releem os turnos antigos e ressuscitam dados
+   * já zerados (ex.: o nome da noiva). Arquiva em vez de apagar, para as conversas
+   * de teste continuarem disponíveis para análise. Best-effort.
    */
   limpar(telefone: string): Promise<void>;
 }

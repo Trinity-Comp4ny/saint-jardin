@@ -5,21 +5,30 @@ export const PERSONA = {
   nome: 'Raquel',
 } as const;
 
+const ABERTURA_CORPO =
+  'Me chamo Raquel e darei continuidade ao seu atendimento.\n\n' +
+  'Antes de conversarmos sobre os detalhes do seu evento, gostaria de te apresentar ' +
+  'um pouco do que torna o Saint Jardin um Destination Wedding tão especial. ' +
+  'Vou te enviar um breve vídeo de apresentação do nosso espaço.\n\n' +
+  'Espero que seja o início de uma experiência inesquecível conosco. ✨';
+
 export const MSG = {
   // Primeira mensagem de quem pede orçamento (texto literal da Raquel, 14/10/2026).
   // Vem antes do vídeo de apresentação. Não pergunta o nome: se a pessoa se
   // apresentar, a NLU captura sozinha.
-  abertura:
-    'Olá, tudo bem? Me chamo Raquel e darei continuidade ao seu atendimento.\n\n' +
-    'Antes de conversarmos sobre os detalhes do seu evento, gostaria de te apresentar ' +
-    'um pouco do que torna o Saint Jardin um Destination Wedding tão especial. ' +
-    'Vou te enviar um breve vídeo de apresentação do nosso espaço.\n\n' +
-    'Espero que seja o início de uma experiência inesquecível conosco. ✨',
+  abertura: `Olá, tudo bem? ${ABERTURA_CORPO}`,
+
+  // Mesma abertura sem o "Olá, tudo bem?", para quando o bot já cumprimentou na
+  // mensagem anterior (comoPosso): evita dois cumprimentos seguidos.
+  aberturaSemSaudacao: ABERTURA_CORPO,
 
   // Primeira mensagem que é SÓ um cumprimento: o fluxo comercial (vídeo, perguntas)
   // só começa quando a pessoa disser que quer orçamento. Protege quem já fechou,
   // fornecedor e assessoria, que a lista de contatos não cobre (100+).
-  comoPosso: 'Olá, tudo bem? Como posso ajudar?',
+  // O trecho institucional é da própria Raquel ("Saint Jardin Eventos agradece seu
+  // contato"). Não diz o nome: a abertura seguinte já se apresenta.
+  comoPosso:
+    'Olá, tudo bem? O Saint Jardin Eventos agradece seu contato. Como posso ajudar?',
 
   perguntaQualificadora:
     'Para orçamento, você poderia me informar a data e o ano do evento ' +
@@ -140,8 +149,8 @@ export const MSG = {
     const o = faltando.join(' e ');
     const variantes = [
       `Só para fechar seu orçamento certinho, você pode me confirmar ${o}?`,
-      `Perfeito! Para fechar seu orçamento, me confirma ${o}?`,
-      `Legal! Só preciso saber ${o} para seguir com seu orçamento.`,
+      `Para fechar seu orçamento, me confirma ${o}, por favor?`,
+      `Para seguir com seu orçamento, preciso saber ${o}. Pode me confirmar?`,
     ];
     // Indexação blindada tipo `vary()`: `i % 3` cru quebraria com seed
     // negativo/NaN (array[-1]/array[NaN] = undefined, mensagem sairia vazia).

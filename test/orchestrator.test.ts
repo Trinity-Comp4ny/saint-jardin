@@ -66,7 +66,9 @@ describe('primeira mensagem: cumprimento antes do pedido', () => {
   it('"oi" sozinho: pergunta como pode ajudar, sem vídeo; o pedido de orçamento inicia o fluxo', async () => {
     const r1 = await processarMensagem(NOIVA, 'Oi, tudo bem?', deps);
     expect(r1.conversa.estado).toBe('aguardando_assunto');
-    expect(r1.saidas.map((s) => s.texto)).toEqual(['Olá, tudo bem? Como posso ajudar?']);
+    expect(r1.saidas.map((s) => s.texto)).toEqual([
+      'Olá, tudo bem? O Saint Jardin Eventos agradece seu contato. Como posso ajudar?',
+    ]);
 
     const r2 = await processarMensagem(NOIVA, 'queria saber os valores para casamento', deps);
     expect(r2.conversa.estado).toBe('aguardando_qualificacao');
@@ -140,6 +142,21 @@ describe('comando de reset (modo teste)', () => {
     await processarMensagem(NOIVA, '#reset', deps);
     // Sem histórico, a NLU não tem como reler o "Ester" antigo no próximo turno.
     expect(await mensagens.historico(NOIVA, 20)).toEqual([]);
+  });
+
+  it('o #reset ARQUIVA o histórico: some do contexto, mas a conversa de teste fica disponível', async () => {
+    deps.numerosTeste = [NOIVA];
+    const mensagens = new InMemoryMensagemRepo();
+    deps.mensagens = mensagens;
+
+    await processarMensagem(NOIVA, 'Oi, me chamo Ester', deps);
+    const antes = (await mensagens.historico(NOIVA, 20)).map((m) => m.conteudo);
+    expect(antes.length).toBeGreaterThan(0);
+
+    await processarMensagem(NOIVA, '#reset', deps);
+    expect(await mensagens.historico(NOIVA, 20)).toEqual([]);
+    // O arquivo guarda tudo que havia, inclusive a própria linha do #reset.
+    expect(mensagens.arquivadas.get(NOIVA)?.map((m) => m.conteudo)).toEqual([...antes, '#reset']);
   });
 });
 

@@ -357,7 +357,9 @@ describe('primeira mensagem: só inicia o fluxo comercial se pedir orçamento', 
     const r = decidir(conversaEm('novo'), nlu({ intencao: 'saudacao' }), ctx);
     expect(r.conversa.estado).toBe('aguardando_assunto');
     expect(r.saidas.map((s) => s.tipo)).toEqual(['texto']);
-    expect(r.saidas[0]?.texto).toBe('Olá, tudo bem? Como posso ajudar?');
+    expect(r.saidas[0]?.texto).toBe(
+      'Olá, tudo bem? O Saint Jardin Eventos agradece seu contato. Como posso ajudar?',
+    );
     expect(r.saidas[0]?.humanizar).toBeFalsy();
   });
 
@@ -365,6 +367,26 @@ describe('primeira mensagem: só inicia o fluxo comercial se pedir orçamento', 
     const r = decidir(conversaEm('aguardando_assunto'), nlu(), ctx);
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
     expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto']);
+  });
+
+  it('depois do "como posso ajudar", a abertura vai SEM o segundo "Olá, tudo bem?"', () => {
+    const depois = decidir(conversaEm('aguardando_assunto'), nlu(), ctx);
+    expect(depois.saidas[0]?.texto).toMatch(/^Me chamo Raquel e darei continuidade ao seu atendimento\./);
+    expect(depois.saidas[0]?.texto).not.toMatch(/tudo bem/i);
+    // o resto da abertura é o mesmo texto da Raquel
+    const direto = decidir(conversaEm('novo'), nlu(), ctx);
+    expect(direto.saidas[0]?.texto).toMatch(/^Olá, tudo bem\? Me chamo Raquel/);
+    expect(direto.saidas[0]?.texto?.replace(/^Olá, tudo bem\? /, '')).toBe(depois.saidas[0]?.texto);
+  });
+
+  it('depois do "como posso ajudar", dúvida + dado de orçamento: abertura também sem saudação', () => {
+    const r = decidir(
+      conversaEm('aguardando_assunto'),
+      nlu({ intencao: 'fora_do_script', slots: { diaSemana: 'sabado' } }),
+      ctx,
+    );
+    expect(r.saidas[0]?.texto).not.toMatch(/tudo bem/i);
+    expect(r.saidas[1]?.tipo).toBe('video');
   });
 
   it('depois do "como posso ajudar", outro cumprimento não repete a pergunta', () => {
