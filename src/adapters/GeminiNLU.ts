@@ -6,6 +6,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
 import type { MensagemLog, NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
+import { completarSlots } from '../domain/slotsDeterministicos';
 
 /** Transcrição compacta do histórico para dar contexto ao modelo (mais antigo primeiro). */
 export function formatarHistorico(historico: MensagemLog[] = [], limite = 12): string {
@@ -241,7 +242,14 @@ export class GeminiNLU implements NLU {
     // Rede final: um retorno inesperado do modelo nunca deve travar a conversa.
     // Se o parse falhar mesmo com os campos tolerantes, degrada para "seguir_fluxo".
     const parsed = schema.safeParse(json);
-    return (parsed.success ? parsed.data : { slots: {}, intencao: 'seguir_fluxo' }) as EntradaNLU;
+    if (!parsed.success) {
+      // Sem isso a falha era invisível: a mensagem virava "nada entendido" e o bot
+      // perguntava de novo o que a pessoa acabara de dizer.
+      console.error('GeminiNLU: resposta do modelo fora do schema', parsed.error.issues);
+    }
+    const entrada = (parsed.success ? parsed.data : { slots: {}, intencao: 'seguir_fluxo' }) as EntradaNLU;
+    // Piso determinístico: completa o que o texto diz sem ambiguidade e o modelo deixou passar.
+    return { ...entrada, slots: completarSlots(texto, conversa.estado, entrada.slots) };
   }
 }
 
