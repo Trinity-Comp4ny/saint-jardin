@@ -104,8 +104,11 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
   } else if (anoFechado !== undefined && ['seguir_fluxo', 'agendar_visita'].includes(e.intencao)) {
     e.intencao = 'fora_do_script';
   }
+  // Ano fechado (2029+) já foi tratado acima: esta regra é só para os demais (ex.: 2026), senão
+  // ela desfazia o encaminhamento de 2030 em diante para a Raquel.
   if (
     comercial &&
+    anoFechado === undefined &&
     e.intencao === 'fora_do_script' &&
     RE_ANO_QUALQUER.test(t) &&
     (e.slots.convidados !== undefined || e.slots.diaSemana !== undefined || e.slots.preferenciaDia !== undefined)
