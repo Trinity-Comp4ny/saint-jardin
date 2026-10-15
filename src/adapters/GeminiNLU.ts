@@ -8,7 +8,7 @@ import type { MensagemLog, NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
 import { completarSlots } from '../domain/slotsDeterministicos';
 import { ajustarEntrada } from '../domain/intencoesDeterministicas';
-import { decodificarEntidades } from '../domain/texto';
+import { decodificarEntidades, sanitizarTextoCurto } from '../domain/texto';
 
 /** Transcrição compacta do histórico para dar contexto ao modelo (mais antigo primeiro). */
 export function formatarHistorico(historico: MensagemLog[] = [], limite = 12): string {
@@ -76,6 +76,15 @@ const responseSchema = {
         periodo: { type: Type.STRING, enum: ['manha', 'tarde'], nullable: true },
         indiferente: { type: Type.BOOLEAN, nullable: true },
         dataHora: { type: Type.STRING, nullable: true },
+      },
+    },
+    casamentoAtendido: {
+      type: Type.OBJECT,
+      nullable: true,
+      properties: {
+        data: { type: Type.STRING, nullable: true },
+        noivos: { type: Type.STRING, nullable: true },
+        servico: { type: Type.STRING, nullable: true },
       },
     },
     nomeDetectado: { type: Type.STRING, nullable: true },
@@ -155,6 +164,20 @@ const schema = z.object({
       dataHora: z.string().transform(decodificarEntidades).optional(),
     })
     .optional(),
+  // Visita técnica: o casamento que o fornecedor atende. Data só como ISO (ou "MM-DD" sem ano);
+  // texto livre vira `undefined` em vez de derrubar o parse.
+  casamentoAtendido: z
+    .object({
+      data: z
+        .string()
+        .transform((s) => (/^\d{4}-\d{2}-\d{2}/.test(s) ? s.slice(0, 10) : /^\d{2}-\d{2}$/.test(s) ? s : undefined))
+        .optional()
+        .catch(undefined),
+      noivos: z.string().transform((s) => sanitizarTextoCurto(s)).optional().catch(undefined),
+      servico: z.string().transform((s) => sanitizarTextoCurto(s, 40)).optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
   // Sanitiza antes de virar `slots.nome`: esse valor entra literal na saudação
   // ao cliente E no alerta interno do Telegram pra Raquel. Sem isso, um nome
   // com quebra de linha forjava linha extra no alerta (ex.: "Maria\nMotivo:
@@ -213,6 +236,7 @@ Extraia TODOS os dados presentes na mensagem, mesmo quando ela for longa ou tive
   Nesse estado, a intenção é "seguir_fluxo" ou "agendar_visita", a não ser que claramente negocie valor ou saia do assunto.
 - No estado "visita_tecnica_data" a pessoa está informando a DATA da visita técnica: extraia data/mesDia/ano normalmente e mantenha a intenção "visita_tecnica".
 - nomeDetectado: o PRIMEIRO nome da pessoa, sempre que ela se apresentar ("me chamo Maria", "sou a Ana", "aqui é a Júlia", "meu nome é Beatriz Souza" -> "Beatriz"). Só o nome dela; não invente nem extraia nome de terceiros (noivo, fornecedor). null se ela não se apresentou.
+- casamentoAtendido: SÓ na intenção "visita_tecnica" (o fornecedor fala do casamento que atende). O fornecedor cita DUAS datas diferentes: a do CASAMENTO que ele atende e a da VISITA que ele quer fazer. Separe: slots.data/mesDia/mes/dia/ano recebem SÓ a data da VISITA (deixe tudo null se ele não disse quando quer visitar). A data do casamento vai em casamentoAtendido.data (ISO yyyy-mm-dd; "MM-DD" se ele não disse o ano). casamentoAtendido.noivos: nome dos noivos ("Ana e Pedro", "casamento da Ana" -> "Ana"). casamentoAtendido.servico: o que ele presta em uma ou duas palavras ("buffet", "decoração", "fotografia"). Ex.: "sou do buffet do casamento da Ana, dia 15/12/2027, queria a visita técnica" -> slots vazios de data, casamentoAtendido {data:"2027-12-15", noivos:"Ana", servico:"buffet"}.
 - dataEventoDetectada: a data do evento quando a pessoa dá a entender que é cliente já fechado (para casar o cadastro dela).`;
 
 export class GeminiNLU implements NLU {

@@ -236,3 +236,27 @@ export function visitaForaDoHorario(
   if (hora !== undefined && (hora < HORARIO_SEMANA.inicio || hora >= HORARIO_SEMANA.fim)) return { quando };
   return undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Visita técnica: o fornecedor fala de DUAS datas. A do casamento que ele atende e a da
+// visita que ele quer. Elas ficam em campos separados (Slots.dataCasamento e
+// Slots.dataVisitaTecnica) e o alerta da Raquel mostra as duas, rotuladas.
+// ---------------------------------------------------------------------------
+
+/** "2027-12-15" -> "15/12/2027"; "12-15" (sem ano) -> "15/12". */
+export function dataCasamentoParaHumano(d: string): string {
+  const cheia = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (cheia) return `${cheia[3]}/${cheia[2]}/${cheia[1]}`;
+  const parcial = d.match(/^(\d{2})-(\d{2})$/);
+  return parcial ? `${parcial[2]}/${parcial[1]}` : d;
+}
+
+/** "casamento 15/12/2027 · Ana e Pedro · buffet", ou vazio se nada foi dito. */
+export function resumoCasamentoAtendido(slots: Slots): string {
+  const partes = [
+    slots.dataCasamento ? dataCasamentoParaHumano(slots.dataCasamento) : '',
+    slots.casamentoNoivos ?? '',
+    slots.fornecedorServico ?? '',
+  ].filter(Boolean);
+  return partes.join(' · ');
+}

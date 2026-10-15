@@ -71,6 +71,23 @@ export class SupabaseContatoRepo implements ContatoRepository {
   }
 }
 
+/** Só uma data ISO completa cabe numa coluna `date`; "MM-DD" (sem ano) fica só nos slots. */
+const soDataIso = (v?: string): string | null => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null);
+
+/**
+ * Espelho dos campos da visita técnica em colunas próprias de `conversas` (migration 0009),
+ * para a Raquel filtrar e ler no painel do banco sem abrir o JSON dos slots. A fonte da
+ * verdade continua sendo `slots`.
+ */
+export function colunasDaVisitaTecnica(slots: Slots): Record<string, string | null> {
+  return {
+    data_visita_tecnica: soDataIso(slots.dataVisitaTecnica),
+    data_casamento: soDataIso(slots.dataCasamento),
+    casamento_noivos: slots.casamentoNoivos ?? null,
+    fornecedor_servico: slots.fornecedorServico ?? null,
+  };
+}
+
 export class SupabaseConversaRepo implements ConversaRepository {
   constructor(private readonly db: SupabaseClient) {}
 
@@ -118,20 +135,25 @@ export class SupabaseConversaRepo implements ConversaRepository {
   }
 
   async salvar(conversa: Conversa): Promise<void> {
-    const { error } = await this.db.from('conversas').upsert(
-      {
-        telefone: conversa.telefone,
-        estado: conversa.estado,
-        slots: conversa.slots,
-        motivo_handoff: conversa.motivoHandoff ?? null,
-        criado_em: conversa.criadoEm,
-        atualizado_em: conversa.atualizadoEm,
-        ultima_entrada_em: conversa.ultimaEntradaEm ?? null,
-        proposta_enviada_em: conversa.propostaEnviadaEm ?? null,
-        followup_enviado_em: conversa.followupEnviadoEm ?? null,
-      },
-      { onConflict: 'telefone' },
-    );
+    const linha = {
+      telefone: conversa.telefone,
+      estado: conversa.estado,
+      slots: conversa.slots,
+      motivo_handoff: conversa.motivoHandoff ?? null,
+      criado_em: conversa.criadoEm,
+      atualizado_em: conversa.atualizadoEm,
+      ultima_entrada_em: conversa.ultimaEntradaEm ?? null,
+      proposta_enviada_em: conversa.propostaEnviadaEm ?? null,
+      followup_enviado_em: conversa.followupEnviadoEm ?? null,
+    };
+    let { error } = await this.db
+      .from('conversas')
+      .upsert({ ...linha, ...colunasDaVisitaTecnica(conversa.slots) }, { onConflict: 'telefone' });
+    // Migration 0009 ainda não rodou (o app e a migration sobem juntos no merge): salva sem as
+    // colunas espelho. O estado da conversa nunca pode depender delas.
+    if (error && /data_visita_tecnica|data_casamento|casamento_noivos|fornecedor_servico/.test(error.message)) {
+      ({ error } = await this.db.from('conversas').upsert(linha, { onConflict: 'telefone' }));
+    }
     if (error) throw new Error(`salvar conversa: ${error.message}`);
   }
 }

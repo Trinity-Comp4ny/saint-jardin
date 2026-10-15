@@ -28,3 +28,13 @@ export function decodificarEntidades(texto: string): string {
     return NOMEADAS[ent] ?? todo;
   });
 }
+
+/**
+ * Texto curto vindo do LLM que entra literal numa mensagem ou no alerta da Raquel (nome,
+ * serviço, noivos): decodifica entidades, tira quebra de linha e controle (senão forjava
+ * linha extra no alerta), colapsa espaço e limita o tamanho. Vazio vira `undefined`.
+ */
+export function sanitizarTextoCurto(bruto: string, max = 60): string | undefined {
+  const limpo = decodificarEntidades(bruto).replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  return limpo || undefined;
+}

@@ -16,7 +16,13 @@ import {
 } from './types';
 import { MSG } from './persona';
 import { pdfPropostaPorAno } from './pdfs';
-import { descreverData, resolverDataTecnica, validarVisitaTecnica, visitaForaDoHorario } from './visita';
+import {
+  descreverData,
+  resolverDataTecnica,
+  resumoCasamentoAtendido,
+  validarVisitaTecnica,
+  visitaForaDoHorario,
+} from './visita';
 import { ehFeriadoFixoOuVespera, ehFeriadoOuVespera } from './feriados';
 
 export interface DisponibilidadeData {
@@ -197,6 +203,11 @@ export function mesclarSlots(atual: Slots, novo: Slots): Slots {
     // Controle interno do aviso de data ocupada: só o próprio bot escreve aqui.
     dataOcupadaAvisada: novo.dataOcupadaAvisada ?? atual.dataOcupadaAvisada,
     tradicionalAceito: novo.tradicionalAceito ?? atual.tradicionalAceito,
+    // Visita técnica: campos próprios, nunca misturados com a data do evento de orçamento.
+    dataVisitaTecnica: novo.dataVisitaTecnica ?? atual.dataVisitaTecnica,
+    dataCasamento: novo.dataCasamento ?? atual.dataCasamento,
+    casamentoNoivos: novo.casamentoNoivos ?? atual.casamentoNoivos,
+    fornecedorServico: novo.fornecedorServico ?? atual.fornecedorServico,
   };
 }
 
@@ -545,6 +556,9 @@ function fluxoVisitaTecnica(
   // da VISITA (o de `slotsData`), não o do casamento — senão a data do casamento
   // já coletada "vazava" como data da visita técnica no turno seguinte. O resto
   // (nome, convidados etc.) segue da conversa.
+  // O casamento que o fornecedor atende (data, noivos, serviço) vai para campos PRÓPRIOS,
+  // separados da data da visita, e se acumula entre os turnos.
+  const casamento = nlu.casamentoAtendido;
   const persistir: Conversa = {
     ...base,
     slots: {
@@ -554,6 +568,9 @@ function fluxoVisitaTecnica(
       mes: slotsData.mes,
       dia: slotsData.dia,
       ano: slotsData.ano,
+      dataCasamento: casamento?.data ?? base.slots.dataCasamento,
+      casamentoNoivos: casamento?.noivos ?? base.slots.casamentoNoivos,
+      fornecedorServico: casamento?.servico ?? base.slots.fornecedorServico,
     },
   };
   const dataISO = resolverDataTecnica(slotsData, ctx.agora);
@@ -578,14 +595,25 @@ function fluxoVisitaTecnica(
   // separar os dois assuntos aqui (isso é decisão de negócio) — só avisa a
   // Raquel pra ela não se confundir e resolver com a cliente.
   const tambemPediuOrcamento = nlu.slots.convidados !== undefined;
+  const casamentoTexto = resumoCasamentoAtendido(persistir.slots);
   const motivo =
     `visita técnica: ${descreverData(dataISO)}` +
+    (casamentoTexto ? ` | casamento: ${casamentoTexto}` : '') +
     (tambemPediuOrcamento
       ? ' — atenção: mensagem também menciona nº de convidados, pode ser pedido de orçamento próprio junto'
       : '');
   // Dentro da regra: avisa que vai verificar e repassa para a Raquel confirmar.
+  // A data da visita sai do conjunto de data (que é do evento de orçamento) e vai para o
+  // campo próprio: `dataVisitaTecnica`. Assim `data`/`ano` não ficam parecendo a data do evento.
+  // O dia da semana da visita também sai: ele já está dentro de `dataVisitaTecnica`.
+  const { data: _d, mesDia: _md, mes: _m, dia: _di, ano: _a, diaSemana: _ds, ...slotsSemData } = persistir.slots;
   return {
-    conversa: { ...persistir, estado: 'handoff', motivoHandoff: motivo },
+    conversa: {
+      ...persistir,
+      slots: { ...slotsSemData, dataVisitaTecnica: dataISO },
+      estado: 'handoff',
+      motivoHandoff: motivo,
+    },
     saidas: [pergunta(MSG.visitaTecnicaVouVerificar)],
   };
 }

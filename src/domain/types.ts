@@ -67,6 +67,19 @@ export interface Slots {
    * convidados cairia de novo na oferta do mini a cada re-qualificação.
    */
   tradicionalAceito?: boolean;
+  /**
+   * Visita técnica (fornecedor de casamento já fechado). Campos PRÓPRIOS, separados da data
+   * do evento de orçamento (`data`, `ano`...): o fornecedor fala de duas datas, a do casamento
+   * que ele atende e a da visita que ele quer, e antes elas se misturavam.
+   */
+  /** Data que o fornecedor pediu para a visita, ISO (YYYY-MM-DD). Só depois de validada. */
+  dataVisitaTecnica?: string;
+  /** Data do casamento que ele atende: ISO, ou "MM-DD" se ele não disse o ano. */
+  dataCasamento?: string;
+  /** Nome dos noivos do casamento que ele atende ("Ana e Pedro"). */
+  casamentoNoivos?: string;
+  /** O que ele presta ("buffet", "decoração", "fotografia"). */
+  fornecedorServico?: string;
 }
 
 export type EstadoConversa =
@@ -167,6 +180,11 @@ export interface EntradaNLU {
    * indeciso recebe o PDF, quem recusa recebe a pergunta das propostas tradicionais.
    */
   indeciso?: boolean;
+  /**
+   * Visita técnica: o casamento que o fornecedor atende (data, noivos e o serviço dele).
+   * Separado de `slots`, onde ficam só os dados de orçamento e a data da PRÓPRIA visita.
+   */
+  casamentoAtendido?: { data?: string; noivos?: string; servico?: string };
   /** Preferência de visita, quando a conversa está no fluxo de agendamento. */
   visita?: PreferenciaVisita;
   nomeDetectado?: string;
