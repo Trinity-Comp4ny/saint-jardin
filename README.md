@@ -53,6 +53,18 @@ gh secret set SUPABASE_DB_URL --env production --repo Trinity-Comp4ny/saint-jard
 
 Migration nova: próximo número (`0009_...`), aditiva, idempotente (`if not exists`).
 
+## Bateria de usabilidade
+
+`tools/usabilidade/`: 89 conversas de noiva rodadas contra o código e o Gemini reais, para ver o que o
+bot responde depois de mudar prompt, regra ou texto. Não roda no CI. Ver o
+[README da pasta](tools/usabilidade/README.md).
+
+```bash
+set -a; . ./.env; set +a
+npm run usabilidade              # local, sem WhatsApp
+npm run usabilidade:ver
+```
+
 ## Estrutura do código
 
 ```

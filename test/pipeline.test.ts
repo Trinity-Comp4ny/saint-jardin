@@ -270,6 +270,49 @@ describe('processarFila — economiza custo quando a conversa já está com a Ra
     expect(chamadas).toHaveLength(0);
   });
 
+  function itemTexto(id: string, telefone: string, texto: string): ItemFila {
+    return { id, telefone, tipo: 'texto', conteudo: texto, processarApos: '2026-07-30T11:59:00.000Z' };
+  }
+
+  it('#reset de número de teste passa MESMO com a conversa em handoff (é quando o teste fica preso)', async () => {
+    for (const estado of ['handoff', 'humano'] as const) {
+      const { fila } = filaCom([itemTexto('1', '5511999', '#reset')]);
+      const { nlu, textos } = nluEspiao();
+      const conversas = new InMemoryConversaRepo();
+      await conversas.salvar(conversaEm('5511999', estado));
+      const deps: Deps = { ...orquestrador(nlu), conversas, numerosTeste: ['5511999'] };
+
+      await processarFila({ fila, transcriber: transcriberEspiao().transcriber, orquestrador: deps });
+
+      expect((await conversas.obter('5511999'))?.estado).toBe('novo');
+      expect(textos).toHaveLength(0); // o reset não passa pela NLU
+    }
+  });
+
+  it('#reset também vale quando vem junto de outra linha da rajada', async () => {
+    const { fila } = filaCom([itemTexto('1', '5511999', '#reser'), itemTexto('2', '5511999', '#reset')]);
+    const { nlu } = nluEspiao();
+    const conversas = new InMemoryConversaRepo();
+    await conversas.salvar(conversaEm('5511999', 'handoff'));
+    const deps: Deps = { ...orquestrador(nlu), conversas, numerosTeste: ['5511999'] };
+
+    await processarFila({ fila, transcriber: transcriberEspiao().transcriber, orquestrador: deps });
+
+    expect((await conversas.obter('5511999'))?.estado).toBe('novo');
+  });
+
+  it('número que NÃO é de teste não consegue sair do handoff com #reset', async () => {
+    const { fila } = filaCom([itemTexto('1', '5511888', '#reset')]);
+    const { nlu } = nluEspiao();
+    const conversas = new InMemoryConversaRepo();
+    await conversas.salvar(conversaEm('5511888', 'handoff'));
+    const deps: Deps = { ...orquestrador(nlu), conversas, numerosTeste: ['5511999'] };
+
+    await processarFila({ fila, transcriber: transcriberEspiao().transcriber, orquestrador: deps });
+
+    expect((await conversas.obter('5511888'))?.estado).toBe('handoff');
+  });
+
   it('continua transcrevendo normalmente quando a conversa não está em handoff', async () => {
     const { fila } = filaCom([itemAudio('1', '5511999', 'media-abc')]);
     const { nlu, textos } = nluEspiao();

@@ -11,7 +11,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "sandbox": "tsx src/sandbox/run.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "usabilidade": "tsx tools/usabilidade/local.ts",
+    "usabilidade:ver": "node tools/usabilidade/ver.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.14.0",

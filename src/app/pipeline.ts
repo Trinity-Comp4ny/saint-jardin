@@ -2,7 +2,7 @@
 // Separado do webhook HTTP para ser testável e reaproveitável.
 
 import { parseWebhook } from '../whatsapp/parseWebhook';
-import { processarMensagem, type Deps } from './orchestrator';
+import { contemComandoReset, processarMensagem, type Deps } from './orchestrator';
 import { novaConversa } from '../domain/stateMachine';
 import { MSG } from '../domain/persona';
 import type { Conversa } from '../domain/types';
@@ -195,7 +195,12 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
         jaComARaquel = false;
       }
 
-      if (!jaComARaquel) {
+      // Exceção: o #reset do número de teste passa mesmo em handoff (senão o teste fica preso).
+      const pedeReset =
+        deps.orquestrador.numerosTeste?.includes(telefone) === true &&
+        grupo.some((i) => i.tipo === 'texto' && contemComandoReset(i.conteudo));
+
+      if (!jaComARaquel || pedeReset) {
         const partes: string[] = [];
         let falhaAudio = false;
         let temTipoNaoSuportado = false;

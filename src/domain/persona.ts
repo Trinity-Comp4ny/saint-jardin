@@ -91,6 +91,12 @@ export const MSG = {
   ofertaTradicional:
     'Podemos então enviar nossas propostas tradicionais que incluem o final de semana também?',
 
+  // Logo depois de QUALQUER proposta (PDF), texto literal da Raquel (15/10/2026). A
+  // noiva só precisa responder se quer visitar. O follow-up de 12h repete o convite.
+  conviteVisitaPosProposta:
+    'O que acharam da proposta? Gostaria de agendar uma visita para conhecer nosso ' +
+    'espaço pessoalmente? É ainda mais lindo! ✨',
+
   // Convite de visita (texto literal da Raquel): diz quando há visita e pergunta o
   // dia. Carrega regra de horário, então vai literal (nunca humanizada).
   // Só sai quando a pessoa aceita ou pede a visita (ou responde ao follow-up).
@@ -98,6 +104,12 @@ export const MSG = {
     'Realizamos visitas de segunda a sexta-feira, em horário comercial, e aos ' +
     'sábados, das 8h às 13h.\n' +
     'Que dia ficará melhor para vocês?',
+
+  // O pedido de visita cai fora do horário anunciado (domingo, sábado à tarde, noite...).
+  // Em vez de um "não" seco, o bot abre uma exceção a ser avaliada pela equipe.
+  visitaExcecao: (quando: string): string =>
+    `Entendi! Vou ver aqui com a equipe se conseguimos abrir uma exceção para ${quando} ` +
+    `e já te retorno, ok? ☺️`,
 
   // A noiva NÃO deu um dia/horário fechado (só preferência ou deixou em aberto). O
   // bot não tem acesso ao calendário, então NÃO promete "esse dia": diz que vai ver

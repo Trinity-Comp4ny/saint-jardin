@@ -37,8 +37,25 @@ describe('respostaDoRedatorAceitavel', () => {
 
   it('aceita um verniz curto e fiel (cortesia + objetivo)', () => {
     expect(
-      respostaDoRedatorAceitavel(objetivo, 'Tudo ótimo, e com você? Para fechar seu orçamento, me confirma o número de convidados, ok?'),
+      respostaDoRedatorAceitavel(
+        objetivo,
+        'Tudo ótimo, e com você? Para fechar seu orçamento, me confirma o número de convidados, ok?',
+        'Oi, tudo bem? sábado',
+      ),
     ).toBe(true);
+  });
+
+  it('rejeita "tudo ótimo, e com você?" quando ninguém perguntou como o bot está', () => {
+    const resposta = 'Oi! Tudo ótimo, e com você? Para fechar seu orçamento, me confirma o número de convidados?';
+    expect(respostaDoRedatorAceitavel(objetivo, resposta, 'Oi, sou fornecedor de decoração')).toBe(false);
+    expect(respostaDoRedatorAceitavel(objetivo, resposta, 'Oi! Vocês fazem festa de 15 anos?')).toBe(false);
+    // Quando perguntou, pode.
+    expect(respostaDoRedatorAceitavel(objetivo, resposta, 'Oi, tudo bem? Queria saber o valor')).toBe(true);
+    expect(respostaDoRedatorAceitavel(objetivo, resposta, 'olá, como vai?')).toBe(true);
+  });
+
+  it('um "Oi!" ou "Bom dia!" simples continua aceito', () => {
+    expect(respostaDoRedatorAceitavel(objetivo, `Bom dia! ${objetivo}`, 'Bom dia, queria um orçamento')).toBe(true);
   });
 
   it.each(['Legal! ', 'Ah, então, ', 'Perfeito, ', 'Que legal! ', 'Ótimo! ', 'Show! '])(

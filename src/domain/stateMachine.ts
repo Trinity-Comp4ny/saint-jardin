@@ -15,7 +15,8 @@ import {
 } from './types';
 import { MSG } from './persona';
 import { pdfPropostaPorAno } from './pdfs';
-import { descreverData, resolverDataTecnica, validarVisitaTecnica } from './visita';
+import { descreverData, resolverDataTecnica, validarVisitaTecnica, visitaForaDoHorario } from './visita';
+import { ehFeriadoFixoOuVespera, ehFeriadoOuVespera } from './feriados';
 
 export interface DisponibilidadeData {
   data: string;
@@ -80,6 +81,12 @@ export function classificarDia(slots: Slots): PreferenciaDia | undefined {
 export function ehMiniWedding(slots: Slots): boolean {
   // Já recusou o mini e aceitou as propostas tradicionais: não oferece de novo.
   if (slots.tradicionalAceito) return false;
+  // Regra obrigatória: mini wedding não vale em feriado nem na véspera de feriado.
+  // Com a data completa checa o calendário inteiro; só com dia e mês, os de data fixa.
+  const dataISO = dataCompleta(slots);
+  if (dataISO ? ehFeriadoOuVespera(dataISO) : slots.mesDia && ehFeriadoFixoOuVespera(slots.mesDia)) {
+    return false;
+  }
   const dia = classificarDia(slots);
   const cabeNoMini =
     slots.convidados !== undefined && slots.convidados <= LIMITE_MINI_WEDDING;
@@ -293,6 +300,18 @@ function temDadoDeOrcamento(slots: Slots): boolean {
   );
 }
 
+/**
+ * A leitura traz um dado de orçamento DIFERENTE do que já se sabe. O modelo às vezes
+ * reemite os "dados já coletados" junto de uma frase que não tem nada a ver
+ * ("quero conhecer o espaço"), e isso virava uma nova cotação com o mesmo PDF.
+ */
+function trouxeDadoDiferente(atual: Slots, nlu: EntradaNLU): boolean {
+  const novo = nlu.slots;
+  return (Object.keys(novo) as (keyof Slots)[]).some(
+    (k) => k !== 'nome' && novo[k] !== undefined && novo[k] !== atual[k],
+  );
+}
+
 /** A leitura traz um dado de orçamento novo (data, dia da semana, convidados...). */
 function trouxeDadoDeOrcamento(nlu: EntradaNLU): boolean {
   const s = nlu.slots;
@@ -328,13 +347,17 @@ function propostaEnviada(base: Conversa): Conversa {
 }
 
 /**
- * Proposta normal do ano: mensagem de ano + PDF. O convite de visita não sai
- * aqui: vai no follow-up de 12h se a pessoa não responder.
+ * Proposta normal do ano: mensagem de ano + PDF + convite de visita (texto da Raquel,
+ * 15/10/2026). O follow-up de 12h repete o convite se a pessoa não responder.
  */
 function enviarPropostaNormal(base: Conversa, ano: Ano): ResultadoDecisao {
   return {
     conversa: propostaEnviada(base),
-    saidas: [texto(MSG.propostaAno(ano)), { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) }],
+    saidas: [
+      texto(MSG.propostaAno(ano)),
+      { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
+      texto(MSG.conviteVisitaPosProposta),
+    ],
   };
 }
 
@@ -659,14 +682,22 @@ export function decidir(
   // prioridade, exceto no primeiro contato (tratado logo abaixo). A visita de
   // noiva NÃO é handoff: é coletada no fluxo (ver casos abaixo).
   const motivo = motivoDaIntencao(nlu.intencao);
+  // Pergunta logo depois da oferta do mini ("tem hospedagem?", "o que inclui?"): é
+  // sobre o mini, e o PDF responde (hospedagem, valores). Manda o PDF e repassa a
+  // pergunta para a Raquel, que responde o que o PDF não cobre. Sem aviso: segue o
+  // padrão de handoff silencioso.
+  if (conversa.estado === 'aguardando_interesse_mini' && nlu.intencao === 'fora_do_script') {
+    return {
+      conversa: { ...base, estado: 'handoff', motivoHandoff: motivo ?? 'pergunta fora do script' },
+      saidas: [texto(MSG.miniInformacoes), { tipo: 'pdf', pdf: 'proposta_mini' }],
+    };
+  }
   if (motivo && !primeiroContato) {
     return handoff(motivo);
   }
   // No primeiro contato, "cliente já fechado" transborda em silêncio; dúvida
   // fora do script ou negociação avisa que vai verificar e repassa a pergunta
-  // pra Raquel. O vídeo só vai se a mensagem também trouxe dado de orçamento:
-  // quem escreve de outro assunto (cliente, assessoria, dúvida) não recebe o
-  // fluxo comercial.
+  // pra Raquel, sem fluxo comercial (cliente, assessoria e dúvida não recebem vídeo).
   if (primeiroContato && nlu.intencao === 'cliente_fechado') {
     return handoff('cliente que já fechou');
   }
@@ -677,10 +708,10 @@ export function decidir(
   ) {
     return {
       conversa: { ...base, estado: 'handoff', motivoHandoff: motivo },
-      saidas: [
-        ...(temDadoDeOrcamento(slots) ? abertura(conversa.estado === 'aguardando_assunto') : []),
-        pergunta(MSG.duvidaVouVerificar),
-      ],
+      // Sem vídeo, mesmo com data na mensagem: "sou a Bruna, noiva do dia 21/08, dúvida
+      // do pagamento" tem data e é cliente fechada. Quem quer orçar E perguntar fala
+      // com a Raquel, que conduz.
+      saidas: [pergunta(MSG.duvidaVouVerificar)],
     };
   }
 
@@ -771,7 +802,23 @@ export function decidir(
         }
         return {
           conversa: propostaEnviada({ ...base, slots: checagem.slots }),
-          saidas: [texto(MSG.orcamentoMiniAnuncio), { tipo: 'pdf', pdf: 'proposta_mini' }],
+          saidas: [
+            texto(MSG.orcamentoMiniAnuncio),
+            { tipo: 'pdf', pdf: 'proposta_mini' },
+            texto(MSG.conviteVisitaPosProposta),
+          ],
+        };
+      }
+      // Indecisa ("vou pensar", "vou ver com meu noivo"): não recusou, então recebe o
+      // PDF do mini para levar na conversa, em vez de ouvir a pergunta das tradicionais.
+      if (nlu.indeciso) {
+        return {
+          conversa: propostaEnviada(base),
+          saidas: [
+            texto(MSG.miniInformacoes),
+            { tipo: 'pdf', pdf: 'proposta_mini' },
+            texto(MSG.conviteVisitaPosProposta),
+          ],
         };
       }
       // Recusou o mini: pergunta se pode mandar as propostas tradicionais (que
@@ -793,7 +840,11 @@ export function decidir(
       // noivo"): manda o PDF do mini com as informações, em vez de insistir.
       return {
         conversa: propostaEnviada(base),
-        saidas: [texto(MSG.miniInformacoes), { tipo: 'pdf', pdf: 'proposta_mini' }],
+        saidas: [
+          texto(MSG.miniInformacoes),
+          { tipo: 'pdf', pdf: 'proposta_mini' },
+          texto(MSG.conviteVisitaPosProposta),
+        ],
       };
 
     case 'aguardando_aceite_tradicional':
@@ -823,16 +874,15 @@ export function decidir(
 
     case 'proposta_enviada':
       // A noiva voltou com dados novos (outro ano, outra data, outro nº de
-      // convidados): re-cotamos em vez de ignorar. Ex.: "e para 2028?".
-      if (trouxeDadoDeOrcamento(nlu)) {
+      // convidados): re-cotamos em vez de ignorar. Ex.: "e para 2028?". Só conta o que
+      // MUDA: o modelo às vezes reemite os dados já coletados sem a pessoa ter dito nada.
+      if (trouxeDadoDiferente(conversa.slots, nlu)) {
         return decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
       }
-      // Pedido explícito de visita ("quero conhecer") sempre vale. Já um "sim" ou
-      // "ok" solto só é aceite do convite DEPOIS do follow-up: a proposta não traz
-      // mais convite, então um "ok, obrigada" logo após o PDF não é um "sim, quero
-      // visitar". Aceite: pergunta o dia e, na resposta, repassa para a Raquel
-      // marcar (ADR-0005 rev.: o bot não agenda a visita de noiva).
-      if (nlu.intencao === 'agendar_visita' || (nlu.afirmativo && conversa.followupEnviadoEm)) {
+      // A proposta (e o follow-up) trazem o convite de visita: um "sim/vamos/ok" é o
+      // aceite. Pergunta o dia e, na resposta, repassa para a Raquel marcar
+      // (ADR-0005 rev.: o bot não agenda a visita de noiva).
+      if (nlu.afirmativo || nlu.intencao === 'agendar_visita') {
         return {
           conversa: { ...base, estado: 'aguardando_pref_visita' },
           saidas: [texto(MSG.perguntaPreferenciaVisita)],
@@ -855,6 +905,19 @@ export function decidir(
       // Desistiu da visita ("não", "deixa pra depois"): encerra sem repassar.
       if (nlu.negativo) {
         return encerrar();
+      }
+      // Pediu um dia/horário FORA do que o bot anunciou (domingo, sábado à tarde, noite):
+      // não diz "não". Abre uma exceção, que a equipe avalia, e repassa para a Raquel.
+      const fora = nlu.visita ? visitaForaDoHorario(nlu.visita, ctx.agora) : undefined;
+      if (fora) {
+        return {
+          conversa: {
+            ...base,
+            estado: 'handoff',
+            motivoHandoff: `visita FORA DO HORÁRIO (${fora.quando}): pedir exceção à equipe`,
+          },
+          saidas: [texto(MSG.visitaExcecao(fora.quando))],
+        };
       }
       // A noiva deu um dia/horário CONCRETO: o bot não tem calendário, então só
       // acusa o que ela pediu e repassa para a Raquel confirmar.
@@ -882,7 +945,7 @@ export function decidir(
       // concreto. As intenções que exigem humano (negociar, dúvida, fornecedor,
       // cliente fechado, visita técnica) já foram tratadas acima. Aqui cuidamos
       // de nova cotação e de aceite de visita.
-      if (trouxeDadoDeOrcamento(nlu)) {
+      if (trouxeDadoDiferente(conversa.slots, nlu)) {
         return decidir({ ...base, estado: 'aguardando_qualificacao' }, nlu, ctx);
       }
       // Só reabre a visita num PEDIDO claro. Um "ok"/"tá" solto depois da despedida

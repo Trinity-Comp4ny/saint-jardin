@@ -28,6 +28,11 @@ const RE_INTERJEICAO = /^\s*(legal|ah+|ahn|uau|nossa|show|beleza|maravilha|perfe
 // Gíria e muleta de fala que não combinam com a Raquel.
 const RE_GIRIA = /(?<![a-zà-ú])(e tal|tipo assim|blz|vlw|n[ée]\?)(?![a-zà-ú])/i;
 
+// "Tudo ótimo, e com você?": só cabe se a pessoa perguntou como o bot está.
+const RE_RECIPROCA = /(tudo [óo]timo|tudo bem,? e (com )?voc[êe]|e com voc[êe]\??|tudo certo,? e voc[êe])/i;
+const RE_PERGUNTOU_COMO_VAI =
+  /(?<![a-zà-ú])(tudo bem|td bem|tudo bom|tudo certo|como vai|como (voc[êe] )?est[áa]|como anda)(?![a-zà-ú])/i;
+
 const numeros = (t: string): string[] => t.match(/\d+/g) ?? [];
 
 /**
@@ -35,8 +40,16 @@ const numeros = (t: string): string[] => t.match(/\d+/g) ?? [];
  * abertura com interjeição ou gíria que o objetivo não tinha, números novos (preço,
  * data, convidados que o modelo inventou) e texto muito maior que o objetivo.
  */
-export function respostaDoRedatorAceitavel(objetivo: string, saida: string): boolean {
+export function respostaDoRedatorAceitavel(
+  objetivo: string,
+  saida: string,
+  mensagemCliente = '',
+): boolean {
   if (!saida.trim()) return false;
+  // "Oi, sou fornecedor..." não perguntou como o bot está: nada de "tudo ótimo, e com você?".
+  if (RE_RECIPROCA.test(saida) && !RE_RECIPROCA.test(objetivo) && !RE_PERGUNTOU_COMO_VAI.test(mensagemCliente)) {
+    return false;
+  }
   if (RE_INTERJEICAO.test(saida) && !RE_INTERJEICAO.test(objetivo)) return false;
   if (RE_GIRIA.test(saida) && !RE_GIRIA.test(objetivo)) return false;
   const permitidos = new Set(numeros(objetivo));

@@ -65,6 +65,19 @@ describe('completarSlots', () => {
     expect(completarSlots('terça, 30 pessoas', 'visita_tecnica_data', {})).toEqual({});
   });
 
+  it('"uns 40" / "cerca de 120" sem a palavra "pessoas" contam como convidados enquanto qualifica', () => {
+    expect(completarSlots('durante a semana, uns 40', 'aguardando_qualificacao', {}).convidados).toBe(40);
+    expect(completarSlots('cerca de 120, sábado', 'novo', {}).convidados).toBe(120);
+    expect(completarSlots('mais ou menos 80', 'aguardando_qualificacao', {}).convidados).toBe(80);
+  });
+
+  it('a aproximação não pega hora, ano, data nem fora da qualificação', () => {
+    expect(completarSlots('uns 10h', 'aguardando_qualificacao', {}).convidados).toBeUndefined();
+    expect(completarSlots('cerca de 2028', 'aguardando_qualificacao', {}).convidados).toBeUndefined();
+    expect(completarSlots('umas 15 dias antes', 'aguardando_qualificacao', {}).convidados).toBeUndefined();
+    expect(completarSlots('uns 40', 'proposta_enviada', {}).convidados).toBeUndefined();
+  });
+
   it('não inventa nada de uma mensagem sem dado', () => {
     expect(completarSlots('queria uma cotacao', 'novo', {})).toEqual({});
   });

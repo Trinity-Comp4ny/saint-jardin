@@ -6,6 +6,7 @@
 import { GoogleGenAI } from '@google/genai';
 import type { MensagemLog, Redator } from '../ports';
 import { formatarHistorico } from './GeminiNLU';
+import { decodificarEntidades } from '../domain/texto';
 
 const MODELO = 'gemini-flash-lite-latest';
 
@@ -21,7 +22,7 @@ Você recebe: o HISTÓRICO da conversa, a última mensagem do cliente e um OBJET
 
 Seu trabalho é dar um verniz LEVE no OBJETIVO, não reescrevê-lo do zero. Faça a MENOR mudança possível: só o suficiente para soar humano. Quanto mais perto do OBJETIVO, melhor. Não invente frases novas, não estique, não encha de floreio.
 
-- Só responda a saudação ou "tudo bem?" SE a mensagem do cliente REALMENTE tiver isso. Aí responda curto e recíproco ("Oi! Tudo ótimo, e com você?") antes do OBJETIVO. Se a mensagem for só uma informação (um dia, um número, "sim"), vá DIRETO ao OBJETIVO, sem saudação inventada.
+- Cumprimento simples ("oi", "olá", "bom dia", "boa tarde"): responda SÓ o cumprimento ("Oi!", "Bom dia!") antes do OBJETIVO. Só responda "tudo ótimo, e com você?" se o cliente PERGUNTOU "tudo bem?" ou "como vai?". Quem não perguntou não recebe "tudo ótimo". Se a mensagem for só uma informação (um dia, um número, "sim"), vá DIRETO ao OBJETIVO, sem saudação inventada.
 - NÃO comente nem opine sobre o que o cliente disse. Nada de "Domingo é ótimo!", "Que legal", "Perfeito", "Ótima escolha". Sem interjeição animada. Vá ao ponto.
 - NOME: quase nunca use. Se usar, SÓ no comecinho, como vocativo separado por vírgula ("Marina, ..."). Se não couber no início, NÃO use o nome. JAMAIS coloque o nome no meio da frase.
 - Se terminar pedindo confirmação, use "ok?" ou "tudo bem?" — NUNCA "tá?".
@@ -74,7 +75,7 @@ export class GeminiRedator implements Redator {
       });
       const t = (resp.text ?? '').trim().replace(/^["']|["']$/g, '');
       // Fallback: se vier vazio, usa o texto-objetivo literal. Sempre capitaliza.
-      return capitalizar(t || entrada.objetivo);
+      return capitalizar(decodificarEntidades(t) || entrada.objetivo);
     } catch {
       // A redação é best-effort: qualquer falha cai no texto fixo original.
       return entrada.objetivo;

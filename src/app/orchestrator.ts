@@ -83,7 +83,7 @@ async function humanizarSaidas(
         nome,
       });
       // Rede determinística: interjeição, gíria ou número inventado volta ao literal.
-      return { ...s, texto: respostaDoRedatorAceitavel(s.texto, reescrito) ? reescrito : s.texto };
+      return { ...s, texto: respostaDoRedatorAceitavel(s.texto, reescrito, mensagemCliente) ? reescrito : s.texto };
     }),
   );
 }
@@ -106,6 +106,15 @@ async function transbordar(
 
 /** Comandos que zeram a conversa no modo teste (variações do "#reset"). */
 const COMANDOS_RESET = new Set(['reset', '#reset', 'resetar', '#resetar']);
+
+/**
+ * Alguma linha da mensagem (a fila agrupa a rajada com "\n") é o comando de reset?
+ * Exportada para o pipeline: o reset precisa chegar ao orquestrador mesmo com a conversa
+ * em handoff, que é justamente quando o teste fica preso.
+ */
+export function contemComandoReset(texto: string): boolean {
+  return texto.split('\n').some((linha) => COMANDOS_RESET.has(linha.trim().toLowerCase()));
+}
 
 export async function processarMensagem(
   telefone: string,
@@ -142,9 +151,7 @@ export async function processarMensagem(
   // A fila agrupa mensagens do mesmo turno com "\n" (ex.: "#reser\n#reset"), então
   // checamos LINHA A LINHA: basta uma ser comando de reset para zerar. Antes, a
   // string juntada não batia com o comando e o bot respondia contra o estado velho.
-  const ehComandoReset = texto
-    .split('\n')
-    .some((linha) => COMANDOS_RESET.has(linha.trim().toLowerCase()));
+  const ehComandoReset = contemComandoReset(texto);
   if (deps.numerosTeste?.includes(telefone) && ehComandoReset) {
     const zerada = novaConversa(telefone, deps.agora());
     await deps.conversas.salvar(zerada);
