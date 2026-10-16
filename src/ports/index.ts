@@ -99,6 +99,17 @@ export interface ConversaRepository {
   reivindicarFollowup(telefone: string, agoraISO: string): Promise<boolean>;
   /** Desfaz a reivindicação quando o envio falhou (o próximo ciclo tenta de novo). */
   liberarFollowup(telefone: string): Promise<void>;
+  /**
+   * Conversas em `aguardando_qualificacao`, sem follow-up, cuja pessoa escreveu pela última vez
+   * entre `desdeISO` e `ateISO`. Candidatas à retomada do orçamento.
+   */
+  pendentesDeRetomada(desdeISO: string, ateISO: string): Promise<Conversa[]>;
+  /**
+   * Reivindica a retomada de forma ATÔMICA. Só vale se a conversa continua em
+   * `aguardando_qualificacao`, sem follow-up e sem mensagem da pessoa depois de `ateISO`
+   * (ela pode ter respondido entre a consulta e o envio). Desfaz com `liberarFollowup`.
+   */
+  reivindicarRetomada(telefone: string, agoraISO: string, ateISO: string): Promise<boolean>;
 }
 
 export type DirecaoMensagem = 'entrada' | 'saida';

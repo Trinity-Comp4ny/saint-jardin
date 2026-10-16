@@ -262,3 +262,23 @@ describe('ajustarEntrada: cumprimento puro não inicia o fluxo', () => {
     expect(ajustarEntrada('tudo bem?', 'proposta_enviada', entrada('seguir_fluxo')).intencao).toBe('seguir_fluxo');
   });
 });
+
+describe('ajustarEntrada: despedida na qualificação (resposta à retomada do orçamento)', () => {
+  it.each(['agora não consigo, depois eu volto', 'obrigada, vou olhar com calma', 'depois eu te falo'])(
+    '"%s" vira despedida mesmo se o modelo disse fora_do_script',
+    (texto) => {
+      for (const modelo of ['seguir_fluxo', 'fora_do_script'] as const) {
+        expect(ajustarEntrada(texto, 'aguardando_qualificacao', entrada(modelo)).intencao).toBe('despedida');
+      }
+    },
+  );
+
+  it('com pergunta no meio não é despedida', () => {
+    expect(ajustarEntrada('depois eu volto, mas vocês têm hospedagem?', 'aguardando_qualificacao', entrada('seguir_fluxo')).intencao).not.toBe('despedida');
+  });
+
+  it('no primeiro contato e na oferta do mini continua como antes', () => {
+    expect(ajustarEntrada('depois eu volto', 'novo', entrada('seguir_fluxo')).intencao).toBe('seguir_fluxo');
+    expect(ajustarEntrada('depois eu volto', 'aguardando_interesse_mini', entrada('fora_do_script')).intencao).toBe('fora_do_script');
+  });
+});

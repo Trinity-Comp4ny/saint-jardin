@@ -85,6 +85,31 @@ export class InMemoryConversaRepo implements ConversaRepository {
     return true;
   }
 
+  async pendentesDeRetomada(desdeISO: string, ateISO: string): Promise<Conversa[]> {
+    return [...this.mapa.values()].filter(
+      (c) =>
+        c.estado === 'aguardando_qualificacao' &&
+        !c.followupEnviadoEm &&
+        c.ultimaEntradaEm !== undefined &&
+        c.ultimaEntradaEm >= desdeISO &&
+        c.ultimaEntradaEm <= ateISO,
+    );
+  }
+
+  async reivindicarRetomada(telefone: string, agoraISO: string, ateISO: string): Promise<boolean> {
+    const c = this.mapa.get(telefone);
+    if (
+      !c ||
+      c.estado !== 'aguardando_qualificacao' ||
+      c.followupEnviadoEm ||
+      (c.ultimaEntradaEm !== undefined && c.ultimaEntradaEm > ateISO)
+    ) {
+      return false;
+    }
+    this.mapa.set(telefone, { ...c, followupEnviadoEm: agoraISO });
+    return true;
+  }
+
   async liberarFollowup(telefone: string): Promise<void> {
     const c = this.mapa.get(telefone);
     if (c) this.mapa.set(telefone, { ...c, followupEnviadoEm: undefined });

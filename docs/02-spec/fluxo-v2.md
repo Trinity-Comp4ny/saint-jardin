@@ -77,7 +77,13 @@ de ano que já existe (`avancarComData`).
 | | Quando | Texto | Canal |
 |---|---|---|---|
 | 1 | 12h após o envio da proposta, sem nenhuma mensagem da pessoa depois | Mensagem 1.7 do material (convite de visita) | Texto livre (dentro das 24h da Meta) |
-| 2 | 1 semana depois | Texto ainda não definido | **Template aprovado na Meta**, porque passa de 24h. **Não implementado** |
+| 2 | 1 semana depois | Texto ainda não definido | **Template aprovado na Meta**, porque passa de 24h. **Fora de escopo** por decisão de 16/10: ficam só os de 12h |
+| Retomada | 12h depois da última mensagem da pessoa, em `aguardando_qualificacao` (parou antes de passar data ou convidados) | "Oi, gostaria de retomar o orçamento?" (proposta do Matheus, 16/10, a confirmar com a Raquel) | Texto livre (dentro das 24h da Meta) |
+
+A retomada usa as mesmas regras de tempo do follow-up 1 (12h a 23h30, 8h às 20h), contadas da última
+mensagem da pessoa, e reaproveita a coluna `followup_enviado_em` (a proposta a zera ao sair, então o
+follow-up 1 segue valendo depois). Resposta "sim" continua pedindo o que falta; "não" ou "depois eu volto"
+encerra com cordialidade. Não vale para quem só cumprimentou (`aguardando_assunto`), nem para a oferta do mini.
 
 Regras comuns: só em `proposta_enviada`; nunca em `handoff`, `humano` ou `encerrada`; só das 8h às 20h
 (Brasília). Se o horário cair fora da janela, espera abrir. Cada follow-up sai uma vez. Se a pessoa

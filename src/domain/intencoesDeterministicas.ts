@@ -58,7 +58,7 @@ export function duvidasNoTexto(texto: string): Duvida[] {
 // Despedida cordial depois da proposta: "obrigada, vou olhar com calma", "depois eu volto".
 // O modelo oscila entre despedida e "seguir_fluxo" para a mesma frase.
 const RE_DESPEDIDA = new RegExp(
-  `${L}(vou (olhar|analisar|ver|pensar)( isso)? com calma|obrigad[oa][^?]*(vou (olhar|ver|pensar|analisar)|depois (eu )?(volto|falo|retorno|vejo))|qualquer coisa (eu )?(te )?(chamo|falo|aviso|retorno)|depois (eu )?(te )?(falo|aviso|retorno|volto))${R}`,
+  `${L}(vou (olhar|analisar|ver|pensar)( isso)? com calma|obrigad[oa][^?]*(vou (olhar|ver|pensar|analisar)|depois (eu )?(volto|falo|retorno|vejo))|qualquer coisa (eu )?(te )?(chamo|falo|aviso|retorno)|depois (eu )?(te )?(falo|aviso|retorno|volto)|agora n[ãa]o (consigo|posso|d[áa]))${R}`,
 );
 
 // "não consegui abrir o pdf", "o vídeo não carrega", "manda o valor aqui no texto".
@@ -167,9 +167,13 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
     // Problema com o PDF/vídeo ou pedido de valor por texto: precisa de gente, não de silêncio.
     e.intencao = 'fora_do_script';
   }
-  // Só depois da proposta: na oferta do mini "vou ver com meu noivo" é indecisão (recebe o PDF),
-  // não despedida.
-  if (estado === 'proposta_enviada' && e.intencao === 'seguir_fluxo' && RE_DESPEDIDA.test(t) && !t.includes('?')) {
+  // Só depois da proposta ou na qualificação (ex.: resposta à retomada do orçamento: "agora não
+  // consigo, depois eu volto"): na oferta do mini "vou ver com meu noivo" é indecisão (recebe o
+  // PDF), não despedida. Na qualificação o modelo também chama isso de fora_do_script (handoff mudo).
+  const lerComoDespedida =
+    (estado === 'proposta_enviada' && e.intencao === 'seguir_fluxo') ||
+    (estado === 'aguardando_qualificacao' && ['seguir_fluxo', 'fora_do_script'].includes(e.intencao));
+  if (lerComoDespedida && RE_DESPEDIDA.test(t) && !t.includes('?')) {
     e.intencao = 'despedida';
   }
   return e;

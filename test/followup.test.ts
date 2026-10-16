@@ -3,6 +3,7 @@ import {
   dentroDaJanelaDeEnvio,
   followupDevido,
   horaEmBrasilia,
+  retomadaDevida,
 } from '../src/domain/followup';
 import { processarFollowups } from '../src/app/followup';
 import { processarMensagem, type Deps } from '../src/app/orchestrator';
@@ -18,6 +19,7 @@ import {
 import { MockNLU } from '../src/adapters/MockNLU';
 import { novaConversa } from '../src/domain/stateMachine';
 import type { Conversa } from '../src/domain/types';
+import type { NLU } from '../src/ports';
 
 // Brasília é UTC-3: 15:00Z = 12:00 BRT.
 const PROPOSTA = '2026-10-14T15:00:00.000Z'; // 12:00 BRT
@@ -232,5 +234,159 @@ describe('follow-up ponta a ponta com o orquestrador', () => {
     expect(c?.estado).toBe('proposta_enviada');
     expect(c?.propostaEnviadaEm).toBe(depois);
     expect(c?.followupEnviadoEm).toBeUndefined();
+  });
+});
+
+describe('retomadaDevida: quem parou de responder antes da proposta', () => {
+  const PERGUNTA = PROPOSTA; // última mensagem da pessoa, 12:00 BRT
+  const emQualificacao = (extra: Partial<Conversa> = {}): Conversa => ({
+    ...novaConversa('5511999', PERGUNTA),
+    estado: 'aguardando_qualificacao',
+    ultimaEntradaEm: PERGUNTA,
+    ...extra,
+  });
+
+  it('com 12h de silêncio, dentro da janela de horário: devida', () => {
+    expect(retomadaDevida(emQualificacao(), mais(PERGUNTA, 20))).toBe(true); // 08:00 BRT do dia seguinte
+  });
+
+  it('antes das 12h, de madrugada ou depois de 23h30: não é devida', () => {
+    expect(retomadaDevida(emQualificacao(), mais(PERGUNTA, 11.9))).toBe(false);
+    expect(retomadaDevida(emQualificacao(), mais(PERGUNTA, 12))).toBe(false); // 00:00 BRT
+    expect(retomadaDevida(emQualificacao(), mais(PERGUNTA, 24))).toBe(false); // passou das 24h da Meta
+  });
+
+  it('só uma vez', () => {
+    expect(retomadaDevida(emQualificacao({ followupEnviadoEm: mais(PERGUNTA, 20) }), mais(PERGUNTA, 21))).toBe(false);
+  });
+
+  it('só em aguardando_qualificacao', () => {
+    for (const estado of [
+      'novo',
+      'aguardando_assunto',
+      'aguardando_interesse_mini',
+      'aguardando_aceite_tradicional',
+      'aguardando_pref_visita',
+      'proposta_enviada',
+      'encerrada',
+      'handoff',
+      'humano',
+    ] as const) {
+      expect(retomadaDevida(emQualificacao({ estado }), mais(PERGUNTA, 20))).toBe(false);
+    }
+  });
+
+  it('sem data da última mensagem da pessoa não é devida', () => {
+    expect(retomadaDevida(emQualificacao({ ultimaEntradaEm: undefined }), mais(PERGUNTA, 20))).toBe(false);
+  });
+});
+
+describe('retomada do orçamento ponta a ponta', () => {
+  const NOIVA = '5511988887777';
+
+  // O MockNLU não marca `negativo`; este envelope faz o papel do Gemini para "não...".
+  const mock = new MockNLU();
+  const nluComNegativa: NLU = {
+    async analisar(texto, conversa) {
+      const r = await mock.analisar(texto, conversa);
+      return /^n[ãa]o\b/i.test(texto) ? { ...r, negativo: true } : r;
+    },
+  };
+
+  function montarFluxo() {
+    const relogio = { agora: PROPOSTA };
+    const messaging = new SandboxProvider();
+    const deps: Deps = {
+      contatos: new InMemoryContatoRepo(),
+      conversas: new InMemoryConversaRepo(),
+      nlu: nluComNegativa,
+      calendario: new MockCalendario(),
+      messaging,
+      notifier: new RecordingNotifier(),
+      mensagens: new InMemoryMensagemRepo(),
+      agora: () => relogio.agora,
+    };
+    return { deps, relogio, messaging };
+  }
+  const textos = (m: SandboxProvider) => m.enviadas.flatMap((e) => e.saidas).map((s) => s.texto);
+
+  it('pediu orçamento e sumiu: 12h depois recebe a retomada, uma vez só', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    expect((await deps.conversas.obter(NOIVA))?.estado).toBe('aguardando_qualificacao');
+
+    relogio.agora = mais(PROPOSTA, 20); // 08:00 BRT do dia seguinte
+    expect(await processarFollowups(deps)).toBe(1);
+    expect(textos(messaging).at(-1)).toBe('Oi, gostaria de retomar o orçamento?');
+    expect(await processarFollowups(deps)).toBe(0);
+  });
+
+  it('respondeu "sim": segue pedindo o que falta', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    relogio.agora = mais(PROPOSTA, 20);
+    await processarFollowups(deps);
+
+    await processarMensagem(NOIVA, 'sim', deps);
+    expect((await deps.conversas.obter(NOIVA))?.estado).toBe('aguardando_qualificacao');
+    expect(textos(messaging).at(-1)).toMatch(/orçamento/);
+    expect(textos(messaging).at(-1)).not.toBe(MSG.retomarOrcamento);
+  });
+
+  it('respondeu "não": encerra com cordialidade, sem pedir os dados de novo', async () => {
+    const { deps, relogio } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    relogio.agora = mais(PROPOSTA, 20);
+    await processarFollowups(deps);
+
+    await processarMensagem(NOIVA, 'não, obrigada', deps);
+    expect((await deps.conversas.obter(NOIVA))?.estado).toBe('encerrada');
+  });
+
+  it('um "não" sem retomada continua pedindo os dados (regra antiga)', async () => {
+    const { deps } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    await processarMensagem(NOIVA, 'não', deps);
+    expect((await deps.conversas.obter(NOIVA))?.estado).toBe('aguardando_qualificacao');
+  });
+
+  it('depois da retomada ela completa os dados: a proposta sai e o follow-up da proposta segue valendo', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    relogio.agora = mais(PROPOSTA, 20);
+    await processarFollowups(deps);
+
+    relogio.agora = mais(PROPOSTA, 21);
+    await processarMensagem(NOIVA, 'sábado, 200 pessoas em 2027', deps);
+    expect((await deps.conversas.obter(NOIVA))?.estado).toBe('proposta_enviada');
+    expect((await deps.conversas.obter(NOIVA))?.followupEnviadoEm).toBeUndefined();
+
+    relogio.agora = mais(PROPOSTA, 21 + 23); // proposta às 09:00 BRT: o follow-up espera as 08:00 do dia seguinte
+    expect(await processarFollowups(deps)).toBe(1);
+    expect(textos(messaging).at(-1)).toBe(MSG.followUp);
+  });
+
+  it('quem respondeu entre a consulta e o envio não recebe (reivindicação atômica)', async () => {
+    const conversas = new InMemoryConversaRepo();
+    const ate = mais(PROPOSTA, 8); // limite: a pessoa deve estar em silêncio desde antes disso
+    await conversas.salvar({
+      ...novaConversa('5511999', PROPOSTA),
+      estado: 'aguardando_qualificacao',
+      ultimaEntradaEm: mais(PROPOSTA, 9), // escreveu depois do limite
+    });
+    expect(await conversas.reivindicarRetomada('5511999', mais(PROPOSTA, 20), ate)).toBe(false);
+  });
+
+  it('o ciclo manda as duas: retomada para uma conversa e follow-up da proposta para outra', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem('5511911111111', 'queria um orçamento', deps);
+    await processarMensagem('5511922222222', 'queria um orçamento', deps);
+    await processarMensagem('5511922222222', 'sábado, 200 pessoas em 2027', deps);
+
+    relogio.agora = mais(PROPOSTA, 20);
+    expect(await processarFollowups(deps)).toBe(2);
+    const enviados = messaging.enviadas.slice(-2).map((e) => e.saidas[0]?.texto);
+    expect(enviados).toContain(MSG.retomarOrcamento);
+    expect(enviados).toContain(MSG.followUp);
   });
 });

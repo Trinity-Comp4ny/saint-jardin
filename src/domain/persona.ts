@@ -217,6 +217,10 @@ export const MSG = {
     'sobre os detalhes e possibilidades de adequar a proposta ao que vocês desejam.\n\n' +
     'Vamos agendar uma visita para conhecer nosso espaço? Será um prazer receber vocês!',
 
+  // Follow-up 12h depois de a pessoa parar de responder ANTES de receber a proposta (ainda faltava
+  // data ou número de convidados). Texto do Matheus (16/10/2026), a confirmar com a Raquel.
+  retomarOrcamento: 'Oi, gostaria de retomar o orçamento?',
+
   // Transcrição do áudio falhou (Gemini indisponível, rate limit, formato etc.).
   // Diz o que houve e o próximo passo, sem termos técnicos e sem culpar a noiva.
   // 1ª pessoa (a persona é a Raquel): nada de "vou chamar a Raquel".
