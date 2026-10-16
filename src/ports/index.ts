@@ -100,6 +100,18 @@ export interface ConversaRepository {
   /** Desfaz a reivindicação quando o envio falhou (o próximo ciclo tenta de novo). */
   liberarFollowup(telefone: string): Promise<void>;
   /**
+   * Conversas em `proposta_enviada` sem convite de visita enviado, cuja proposta foi enviada entre
+   * `desdeISO` e `ateISO`. Candidatas ao convite dos 5 minutos.
+   */
+  pendentesDeConvite(desdeISO: string, ateISO: string): Promise<Conversa[]>;
+  /**
+   * Reivindica o convite de forma ATÔMICA. Só vale se a conversa continua em `proposta_enviada`, sem
+   * convite enviado e sem mensagem da pessoa depois da proposta (`propostaEnviadaEm`).
+   */
+  reivindicarConvite(telefone: string, agoraISO: string, propostaEnviadaEm: string): Promise<boolean>;
+  /** Desfaz a reivindicação do convite quando o envio falhou. */
+  liberarConvite(telefone: string): Promise<void>;
+  /**
    * Conversas em `aguardando_qualificacao`, sem follow-up, cuja pessoa escreveu pela última vez
    * entre `desdeISO` e `ateISO`. Candidatas à retomada do orçamento.
    */

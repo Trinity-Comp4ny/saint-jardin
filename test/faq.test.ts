@@ -105,15 +105,25 @@ describe('decidir: responde a dúvida e segue o fluxo', () => {
     expect(r.conversa.estado).toBe('aguardando_qualificacao');
   });
 
-  it('depois da proposta: só a resposta, sem handoff e sem puxar fluxo', () => {
-    const r = decidir(conversaEm('proposta_enviada'), ler('e tem hospedagem?', 'proposta_enviada'), ctx);
+  it('depois da proposta (convite já enviado): só a resposta, sem handoff e sem puxar fluxo', () => {
+    const r = decidir(
+      { ...conversaEm('proposta_enviada'), conviteEnviadoEm: AGORA },
+      ler('e tem hospedagem?', 'proposta_enviada'),
+      ctx,
+    );
     expect(textos(r)).toEqual([MSG.faqHospedagem]);
     expect(r.conversa.estado).toBe('proposta_enviada');
   });
 
+  it('depois da proposta, antes dos 5 minutos (convite pendente): a resposta e, em seguida, o convite', () => {
+    const r = decidir(conversaEm('proposta_enviada'), ler('e tem hospedagem?', 'proposta_enviada'), ctx);
+    expect(textos(r)).toEqual([MSG.faqHospedagem, MSG.conviteVisitaPosProposta]);
+    expect(r.conversa.conviteEnviadoEm).toBe(AGORA);
+  });
+
   it('as duas dúvidas juntas: hospedagem e pacotes, nessa ordem', () => {
     const r = decidir(
-      conversaEm('proposta_enviada'),
+      { ...conversaEm('proposta_enviada'), conviteEnviadoEm: AGORA },
       ler('tem hospedagem? e vocês trabalham com pacotes fechados?', 'proposta_enviada'),
       ctx,
     );

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  conviteDevido,
   dentroDaJanelaDeEnvio,
   followupDevido,
   horaEmBrasilia,
@@ -32,6 +33,7 @@ function conversaProposta(extra: Partial<Conversa> = {}): Conversa {
     estado: 'proposta_enviada',
     propostaEnviadaEm: PROPOSTA,
     ultimaEntradaEm: PROPOSTA,
+    conviteEnviadoEm: PROPOSTA, // o convite de 5 min é testado à parte; aqui vale o follow-up de 12h
     ...extra,
   };
 }
@@ -388,5 +390,134 @@ describe('retomada do orçamento ponta a ponta', () => {
     const enviados = messaging.enviadas.slice(-2).map((e) => e.saidas[0]?.texto);
     expect(enviados).toContain(MSG.retomarOrcamento);
     expect(enviados).toContain(MSG.followUp);
+  });
+});
+
+describe('conviteDevido: "O que acharam da proposta?" 5 minutos depois do PDF', () => {
+  // proposta às 12:00 BRT; 5 min depois = 12:05 BRT, dentro da janela de envio
+  const pendente = (extra: Partial<Conversa> = {}): Conversa => ({
+    ...novaConversa('5511999', PROPOSTA),
+    estado: 'proposta_enviada',
+    propostaEnviadaEm: PROPOSTA,
+    ultimaEntradaEm: PROPOSTA,
+    ...extra,
+  });
+  const minutos = (iso: string, m: number) => new Date(new Date(iso).getTime() + m * 60_000).toISOString();
+
+  it('com 5 minutos de silêncio: devido. Antes disso, não', () => {
+    expect(conviteDevido(pendente(), minutos(PROPOSTA, 4.9))).toBe(false);
+    expect(conviteDevido(pendente(), minutos(PROPOSTA, 5))).toBe(true);
+  });
+
+  it('se a pessoa escreveu depois da proposta, não é devido (o convite vai junto da resposta do bot)', () => {
+    expect(conviteDevido(pendente({ ultimaEntradaEm: minutos(PROPOSTA, 2) }), minutos(PROPOSTA, 6))).toBe(false);
+  });
+
+  it('só uma vez', () => {
+    expect(conviteDevido(pendente({ conviteEnviadoEm: minutos(PROPOSTA, 5) }), minutos(PROPOSTA, 6))).toBe(false);
+  });
+
+  it('só em proposta_enviada', () => {
+    for (const estado of ['handoff', 'humano', 'encerrada', 'aguardando_pref_visita', 'aguardando_qualificacao'] as const) {
+      expect(conviteDevido(pendente({ estado }), minutos(PROPOSTA, 6))).toBe(false);
+    }
+  });
+
+  it('fora da janela das 8h às 20h não sai, e depois de 30 minutos também não (o follow-up de 12h cobre)', () => {
+    const noite = '2026-10-14T22:58:00.000Z'; // 19:58 BRT
+    const c = pendente({ propostaEnviadaEm: noite, ultimaEntradaEm: noite });
+    expect(conviteDevido(c, minutos(noite, 5))).toBe(false); // 20:03 BRT, fora da janela
+    expect(conviteDevido(c, minutos(noite, 12 * 60 + 2))).toBe(false); // 08:00 do dia seguinte: o follow-up de 12h
+    expect(conviteDevido(pendente(), minutos(PROPOSTA, 31))).toBe(false); // cron parado: não manda atrasado
+    expect(conviteDevido(pendente(), minutos(PROPOSTA, 30))).toBe(true);
+  });
+});
+
+describe('convite de visita ponta a ponta', () => {
+  const NOIVA = '5511988887777';
+  const minutos = (iso: string, m: number) => new Date(new Date(iso).getTime() + m * 60_000).toISOString();
+
+  function montarFluxo() {
+    const relogio = { agora: PROPOSTA };
+    const messaging = new SandboxProvider();
+    const deps: Deps = {
+      contatos: new InMemoryContatoRepo(),
+      conversas: new InMemoryConversaRepo(),
+      nlu: new MockNLU(),
+      calendario: new MockCalendario(),
+      messaging,
+      notifier: new RecordingNotifier(),
+      mensagens: new InMemoryMensagemRepo(),
+      agora: () => relogio.agora,
+    };
+    return { deps, relogio, messaging };
+  }
+  const textos = (m: SandboxProvider) => m.enviadas.flatMap((e) => e.saidas).map((s) => s.texto);
+
+  it('a proposta sai sem o convite; 5 minutos depois o job manda, uma vez só', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    await processarMensagem(NOIVA, 'sábado, 200 pessoas em 2027', deps);
+    expect(textos(messaging)).not.toContain(MSG.conviteVisitaPosProposta);
+
+    relogio.agora = minutos(PROPOSTA, 3);
+    expect(await processarFollowups(deps)).toBe(0); // ainda não deu 5 minutos
+
+    relogio.agora = minutos(PROPOSTA, 5);
+    expect(await processarFollowups(deps)).toBe(1);
+    expect(textos(messaging).at(-1)).toBe(MSG.conviteVisitaPosProposta);
+    expect(await processarFollowups(deps)).toBe(0);
+  });
+
+  it('respondeu em 2 minutos ("adorei!"): o convite vem junto da resposta e o job não repete', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    await processarMensagem(NOIVA, 'sábado, 200 pessoas em 2027', deps);
+
+    relogio.agora = minutos(PROPOSTA, 2);
+    await processarMensagem(NOIVA, 'adorei', deps);
+    expect(textos(messaging).at(-1)).toBe(MSG.conviteVisitaPosProposta);
+
+    relogio.agora = minutos(PROPOSTA, 6);
+    expect(await processarFollowups(deps)).toBe(0);
+  });
+
+  it('depois do convite de 5 min, o follow-up de 12h segue valendo', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    await processarMensagem(NOIVA, 'sábado, 200 pessoas em 2027', deps);
+    relogio.agora = minutos(PROPOSTA, 5);
+    await processarFollowups(deps);
+
+    relogio.agora = mais(PROPOSTA, 20); // 08:00 BRT do dia seguinte
+    expect(await processarFollowups(deps)).toBe(1);
+    expect(textos(messaging).at(-1)).toBe(MSG.followUp);
+  });
+
+  it('se o envio do convite falha, libera para o próximo ciclo tentar de novo', async () => {
+    const { deps, relogio, messaging } = montarFluxo();
+    await processarMensagem(NOIVA, 'queria um orçamento', deps);
+    await processarMensagem(NOIVA, 'sábado, 200 pessoas em 2027', deps);
+    const original = messaging.enviar.bind(messaging);
+    let falhar = true;
+    messaging.enviar = async (tel, saidas) => {
+      if (falhar) throw new Error('Cloud API 500');
+      return original(tel, saidas);
+    };
+    relogio.agora = minutos(PROPOSTA, 5);
+    expect(await processarFollowups(deps)).toBe(0);
+    falhar = false;
+    expect(await processarFollowups(deps)).toBe(1);
+  });
+
+  it('quem escreveu entre a consulta e o envio não recebe (reivindicação atômica)', async () => {
+    const conversas = new InMemoryConversaRepo();
+    await conversas.salvar({
+      ...novaConversa('5511999', PROPOSTA),
+      estado: 'proposta_enviada',
+      propostaEnviadaEm: PROPOSTA,
+      ultimaEntradaEm: minutos(PROPOSTA, 3), // escreveu depois da proposta
+    });
+    expect(await conversas.reivindicarConvite('5511999', minutos(PROPOSTA, 5), PROPOSTA)).toBe(false);
   });
 });

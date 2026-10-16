@@ -148,6 +148,11 @@ export interface Conversa {
   propostaEnviadaEm?: string;
   /** Quando o follow-up foi enviado (uma vez por proposta). */
   followupEnviadoEm?: string;
+  /**
+   * Quando o convite de visita pós-proposta foi enviado (uma vez por proposta). Ausente depois de
+   * uma proposta = ainda pendente: sai 5 minutos depois do PDF ou na próxima resposta da pessoa.
+   */
+  conviteEnviadoEm?: string;
 }
 
 export type TipoPdf = 'proposta_2027' | 'proposta_2028' | 'proposta_mini';

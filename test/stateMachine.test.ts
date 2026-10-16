@@ -9,6 +9,7 @@ import {
   resumoEvento,
   type ContextoDecisao,
 } from '../src/domain/stateMachine';
+import { MSG } from '../src/domain/persona';
 import type { Conversa, EntradaNLU } from '../src/domain/types';
 
 const AGORA = '2026-07-21T12:00:00.000Z';
@@ -17,6 +18,9 @@ const ctx: ContextoDecisao = { agora: AGORA };
 function nlu(parcial: Partial<EntradaNLU> = {}): EntradaNLU {
   return { slots: {}, intencao: 'seguir_fluxo', ...parcial };
 }
+
+/** Conversa que já recebeu o convite de visita (pós-proposta): respostas soltas ficam em silêncio. */
+const conviteJaEnviado = (c: Conversa): Conversa => ({ ...c, conviteEnviadoEm: AGORA });
 
 function conversaEm(estado: Conversa['estado'], slots: Conversa['slots'] = {}): Conversa {
   return { ...novaConversa('5511999', AGORA), estado, slots };
@@ -75,8 +79,8 @@ describe('fluxo feliz - evento normal', () => {
     // A abertura (texto + vídeo) sempre vai primeiro, mas não repete a qualificadora:
     // os dados já vieram, então pula direto pra proposta no mesmo turno.
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto', 'pdf', 'texto']);
-    expect(r.saidas.at(-1)?.texto).toMatch(/^O que acharam da proposta\?/);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'video', 'texto', 'pdf']);
+    expect(r.saidas.some((s) => s.texto === MSG.conviteVisitaPosProposta)).toBe(false); // sai 5 min depois
     expect(r.saidas[0]?.texto).toMatch(/Me chamo Raquel/);
     expect(r.saidas[1]?.video).toBe('apresentacao');
     expect(r.saidas[2]?.texto).toMatch(/proposta para casamentos em 2027/);
@@ -206,14 +210,14 @@ describe('fluxo feliz - evento normal', () => {
     expect(r.conversa.estado).toBe('proposta_enviada');
     // Mensagem de ano (literal da Raquel) + PDF do ano + convite de visita (texto da
     // Raquel de 15/10/2026, literal e sem passar pelo Redator).
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
     expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2028/);
     expect(r.saidas[0]?.texto).toMatch(/Destination Wedding/);
     expect(r.saidas[1]?.pdf).toBe('proposta_2028');
-    expect(r.saidas[2]?.texto).toBe(
+    // O convite "O que acharam da proposta?" não vai junto: sai 5 minutos depois (job de follow-up).
+    expect(MSG.conviteVisitaPosProposta).toBe(
       'O que acharam da proposta? Gostaria de agendar uma visita para conhecer nosso espaço pessoalmente? É ainda mais lindo! ✨',
     );
-    expect(r.saidas[2]?.humanizar).toBeFalsy();
     expect(r.conversa.propostaEnviadaEm).toBe(AGORA);
   });
 
@@ -242,9 +246,8 @@ describe('fluxo mini wedding', () => {
   it('envia o PDF do mini quando a noiva aceita', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini'), nlu({ afirmativo: true }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
-    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta) + convite de visita
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
-    expect(r.saidas[2]?.texto).toMatch(/^O que acharam da proposta\?/);
+    // anúncio curto + PDF do mini (2027 e 2028 na mesma proposta); o convite sai 5 minutos depois
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
     expect(r.saidas[0]?.texto).toMatch(/mini wedding/i);
     expect(r.saidas[1]?.pdf).toBe('proposta_mini');
     expect(r.conversa.propostaEnviadaEm).toBe(AGORA);
@@ -284,7 +287,7 @@ describe('fluxo mini wedding', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
     expect(r.saidas[0]?.texto).toBe('Segue nosso PDF de mini wedding com as informações:');
     expect(r.saidas[1]?.pdf).toBe('proposta_mini');
   });
@@ -309,7 +312,7 @@ describe('aceite das propostas tradicionais depois de recusar o mini', () => {
       ctx,
     );
     expect(r.conversa.estado).toBe('proposta_enviada');
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
     expect(r.saidas[0]?.texto).toMatch(/proposta para casamentos em 2028/);
     expect(r.saidas[1]?.pdf).toBe('proposta_2028');
     expect(r.conversa.slots.tradicionalAceito).toBe(true);
@@ -425,7 +428,7 @@ describe('primeira mensagem: só inicia o fluxo comercial se pedir orçamento', 
   });
 
   it('cumprimento fora do primeiro contato (ex.: proposta enviada) não muda nada', () => {
-    const r = decidir(conversaEm('proposta_enviada'), nlu({ intencao: 'saudacao' }), ctx);
+    const r = decidir(conviteJaEnviado(conversaEm('proposta_enviada')), nlu({ intencao: 'saudacao' }), ctx);
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.saidas).toHaveLength(0);
   });
@@ -833,7 +836,7 @@ describe('handoff', () => {
     // muda. Despedida de verdade já é pega pelo guard do topo de `decidir`;
     // aqui, sem sinal claro, o certo é ficar quieta, não fechar.
     const r = decidir(
-      conversaEm('proposta_enviada', { diaSemana: 'sabado', convidados: 150, ano: 2027 }),
+      conviteJaEnviado(conversaEm('proposta_enviada', { diaSemana: 'sabado', convidados: 150, ano: 2027 })),
       nlu({ nomeDetectado: 'Beatriz' }),
       ctx,
     );
@@ -1153,7 +1156,7 @@ describe('mini: indecisa e pergunta sobre o mini', () => {
 
   it('"vou ver com meu noivo" recebe o PDF do mini (não a pergunta das tradicionais)', () => {
     const r = decidir(conversaEm('aguardando_interesse_mini', slotsMini), nlu({ indeciso: true, negativo: true }), ctx);
-    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf', 'texto']);
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
     expect(r.saidas[1]?.pdf).toBe('proposta_mini');
     expect(r.conversa.estado).toBe('proposta_enviada');
   });
@@ -1175,14 +1178,47 @@ describe('convite de visita depois da proposta', () => {
     }
   });
 
-  it('o convite sai depois de qualquer proposta, nunca antes do PDF', () => {
+  it('a proposta sai sem o convite: ele fica pendente para 5 minutos depois (ou para a próxima resposta)', () => {
     const r = decidir(
       conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 150 }),
       nlu({ slots: { ano: 2028 } }),
       ctx,
     );
-    const tipos = r.saidas.map((s) => s.tipo);
-    expect(tipos.lastIndexOf('texto')).toBeGreaterThan(tipos.indexOf('pdf'));
+    expect(r.saidas.map((s) => s.tipo)).toEqual(['texto', 'pdf']);
+    expect(r.saidas.some((s) => s.texto === MSG.conviteVisitaPosProposta)).toBe(false);
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.conversa.conviteEnviadoEm).toBeUndefined();
+  });
+
+  it('o mini também sai sem o convite imediato', () => {
+    const r = decidir(
+      conversaEm('aguardando_interesse_mini', { diaSemana: 'segunda', convidados: 30, ano: 2028 }),
+      nlu({ afirmativo: true }),
+      ctx,
+    );
+    expect(r.saidas.some((s) => s.texto === MSG.conviteVisitaPosProposta)).toBe(false);
+    expect(r.conversa.conviteEnviadoEm).toBeUndefined();
+  });
+
+  it('respondeu antes dos 5 minutos sem pedir nada ("adorei!"): o convite sai agora, uma vez só', () => {
+    const r1 = decidir(conversaEm('proposta_enviada'), nlu(), ctx);
+    expect(r1.saidas.map((s) => s.texto)).toEqual([MSG.conviteVisitaPosProposta]);
+    expect(r1.conversa.estado).toBe('proposta_enviada');
+    expect(r1.conversa.conviteEnviadoEm).toBe(AGORA);
+
+    const r2 = decidir(r1.conversa, nlu(), ctx);
+    expect(r2.saidas).toHaveLength(0);
+  });
+
+  it('depois do follow-up de 12h (que já traz o convite), uma resposta solta não repete o convite', () => {
+    const r = decidir({ ...conversaEm('proposta_enviada'), followupEnviadoEm: AGORA }, nlu(), ctx);
+    expect(r.saidas).toHaveLength(0);
+  });
+
+  it('respondeu "sim": vai direto para o dia da visita, sem convite repetido', () => {
+    const r = decidir(conversaEm('proposta_enviada'), nlu({ afirmativo: true }), ctx);
+    expect(r.conversa.estado).toBe('aguardando_pref_visita');
+    expect(r.saidas.some((s) => s.texto === MSG.conviteVisitaPosProposta)).toBe(false);
   });
 });
 

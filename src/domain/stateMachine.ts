@@ -379,8 +379,8 @@ function dataBR(dataISO: string): string {
 }
 
 /**
- * Marca a proposta como enviada agora. É o ponto de partida do follow-up de 12h
- * (uma proposta nova, por ex. de outro ano, reinicia a contagem).
+ * Marca a proposta como enviada agora. É o ponto de partida do convite de visita (5 min) e do
+ * follow-up de 12h (uma proposta nova, por ex. de outro ano, reinicia as duas contagens).
  */
 function propostaEnviada(base: Conversa): Conversa {
   return {
@@ -388,6 +388,9 @@ function propostaEnviada(base: Conversa): Conversa {
     estado: 'proposta_enviada',
     propostaEnviadaEm: base.atualizadoEm,
     followupEnviadoEm: undefined,
+    // O convite de visita sai 5 minutos depois do PDF, se a pessoa não escrever (job de follow-up),
+    // ou logo depois da próxima mensagem dela que não peça nada (ver 'proposta_enviada').
+    conviteEnviadoEm: undefined,
   };
 }
 
@@ -401,7 +404,6 @@ function enviarPropostaNormal(base: Conversa, ano: Ano): ResultadoDecisao {
     saidas: [
       texto(MSG.propostaAno(ano)),
       { tipo: 'pdf', pdf: pdfPropostaPorAno(ano) },
-      texto(MSG.conviteVisitaPosProposta),
     ],
   };
 }
@@ -771,7 +773,6 @@ export function decidir(
             saidas: [
               texto(MSG.miniInformacoes),
               { tipo: 'pdf' as const, pdf: 'proposta_mini' as const },
-              texto(MSG.conviteVisitaPosProposta),
             ],
           }
         : enviarPropostaNormal(r.conversa, 2028);
@@ -970,7 +971,6 @@ export function decidir(
           saidas: [
             texto(MSG.orcamentoMiniAnuncio),
             { tipo: 'pdf', pdf: 'proposta_mini' },
-            texto(MSG.conviteVisitaPosProposta),
           ],
         };
       }
@@ -982,7 +982,6 @@ export function decidir(
           saidas: [
             texto(MSG.miniInformacoes),
             { tipo: 'pdf', pdf: 'proposta_mini' },
-            texto(MSG.conviteVisitaPosProposta),
           ],
         };
       }
@@ -1008,7 +1007,6 @@ export function decidir(
         saidas: [
           texto(MSG.miniInformacoes),
           { tipo: 'pdf', pdf: 'proposta_mini' },
-          texto(MSG.conviteVisitaPosProposta),
         ],
       };
 
@@ -1064,6 +1062,15 @@ export function decidir(
       // verdade já é pega pelo guard do topo de `decidir`; aqui, sem sinal
       // claro, o certo é não fechar a conversa sozinha nem insistir de novo no
       // convite de visita — fica quieta, ela segue de onde parou no próximo dado.
+      // Exceção: o convite de visita ainda não saiu (a pessoa respondeu antes dos 5 minutos, ex.:
+      // "adorei!"). Como ela não pediu nada, o convite vai agora, uma vez só.
+      // O follow-up de 12h já traz o convite, então depois dele também não repete.
+      if (!conversa.conviteEnviadoEm && !conversa.followupEnviadoEm) {
+        return {
+          conversa: { ...base, conviteEnviadoEm: ctx.agora },
+          saidas: [texto(MSG.conviteVisitaPosProposta)],
+        };
+      }
       return { conversa: base, saidas: [] };
 
     case 'aguardando_pref_visita': {

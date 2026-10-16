@@ -85,6 +85,36 @@ export class InMemoryConversaRepo implements ConversaRepository {
     return true;
   }
 
+  async pendentesDeConvite(desdeISO: string, ateISO: string): Promise<Conversa[]> {
+    return [...this.mapa.values()].filter(
+      (c) =>
+        c.estado === 'proposta_enviada' &&
+        !c.conviteEnviadoEm &&
+        c.propostaEnviadaEm !== undefined &&
+        c.propostaEnviadaEm >= desdeISO &&
+        c.propostaEnviadaEm <= ateISO,
+    );
+  }
+
+  async reivindicarConvite(telefone: string, agoraISO: string, propostaEnviadaEm: string): Promise<boolean> {
+    const c = this.mapa.get(telefone);
+    if (
+      !c ||
+      c.estado !== 'proposta_enviada' ||
+      c.conviteEnviadoEm ||
+      (c.ultimaEntradaEm !== undefined && c.ultimaEntradaEm > propostaEnviadaEm)
+    ) {
+      return false;
+    }
+    this.mapa.set(telefone, { ...c, conviteEnviadoEm: agoraISO });
+    return true;
+  }
+
+  async liberarConvite(telefone: string): Promise<void> {
+    const c = this.mapa.get(telefone);
+    if (c) this.mapa.set(telefone, { ...c, conviteEnviadoEm: undefined });
+  }
+
   async pendentesDeRetomada(desdeISO: string, ateISO: string): Promise<Conversa[]> {
     return [...this.mapa.values()].filter(
       (c) =>

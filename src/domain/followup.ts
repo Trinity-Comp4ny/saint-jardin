@@ -14,6 +14,15 @@ export const FOLLOWUP_APOS_HORAS = 12;
  */
 export const FOLLOWUP_LIMITE_HORAS = 23.5;
 
+/** Espera depois do envio da proposta antes do convite de visita (pedido da Raquel, 16/10/2026). */
+export const CONVITE_APOS_MINUTOS = 5;
+/**
+ * Depois disso o convite dos 5 minutos não sai mais (cron parado, ou proposta à noite que esperaria a
+ * janela das 8h): quem cobre é o follow-up de 12h, que já traz o convite. Sem este teto, os dois
+ * saíam juntos ou com uma hora de diferença.
+ */
+export const CONVITE_LIMITE_MINUTOS = 30;
+
 /** Janela de envio em horário de Brasília: [início, fim). Evita mensagem de madrugada. */
 export const JANELA_ENVIO = { inicio: 8, fim: 20 } as const;
 
@@ -32,6 +41,19 @@ export function horaEmBrasilia(iso: string): number {
 export function dentroDaJanelaDeEnvio(agoraISO: string): boolean {
   const h = horaEmBrasilia(agoraISO);
   return h >= JANELA_ENVIO.inicio && h < JANELA_ENVIO.fim;
+}
+
+/**
+ * O convite de visita está devido? Sai de CONVITE_APOS_MINUTOS a CONVITE_LIMITE_MINUTOS depois do PDF
+ * se a pessoa não escreveu e dentro da janela das 8h às 20h. Quem escreve antes recebe o convite junto
+ * da resposta do bot (ver máquina de estados), então aqui qualquer mensagem depois da proposta cancela.
+ */
+export function conviteDevido(c: Conversa, agoraISO: string): boolean {
+  if (c.estado !== 'proposta_enviada' || c.conviteEnviadoEm || !c.propostaEnviadaEm) return false;
+  if (c.ultimaEntradaEm && c.ultimaEntradaEm > c.propostaEnviadaEm) return false;
+  const idadeMin = (new Date(agoraISO).getTime() - new Date(c.propostaEnviadaEm).getTime()) / 60_000;
+  if (idadeMin < CONVITE_APOS_MINUTOS || idadeMin > CONVITE_LIMITE_MINUTOS) return false;
+  return dentroDaJanelaDeEnvio(agoraISO);
 }
 
 /**

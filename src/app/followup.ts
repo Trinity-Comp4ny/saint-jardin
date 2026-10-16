@@ -1,10 +1,14 @@
-// Follow-ups de 12h, chamados pelo mesmo cron de /api/process:
+// Follow-ups, chamados pelo mesmo cron de /api/process (a cada minuto):
+//  - convite de visita: 5 minutos depois da proposta, se a pessoa não escreveu;
 //  - da proposta: a pessoa recebeu a proposta e não escreveu; pergunta se ficou dúvida e convida
 //    para a visita;
 //  - da retomada: a pessoa parou de responder ANTES da proposta (faltava data ou convidados);
 //    pergunta se quer retomar o orçamento.
 
 import {
+  CONVITE_APOS_MINUTOS,
+  CONVITE_LIMITE_MINUTOS,
+  conviteDevido,
   dentroDaJanelaDeEnvio,
   followupDevido,
   retomadaDevida,
@@ -25,6 +29,7 @@ async function enviarFollowups(
   devido: (c: Conversa) => boolean,
   reivindicar: (telefone: string) => Promise<boolean>,
   texto: string,
+  liberar: (telefone: string) => Promise<void> = (telefone) => deps.conversas.liberarFollowup(telefone),
 ): Promise<number> {
   let enviados = 0;
   for (const conversa of candidatas) {
@@ -36,7 +41,7 @@ async function enviarFollowups(
     } catch (erro) {
       // Falhou o envio: solta a reivindicação para o próximo ciclo tentar de novo.
       console.error(`processarFollowups: falha enviando para ${conversa.telefone}`, erro);
-      await deps.conversas.liberarFollowup(conversa.telefone);
+      await liberar(conversa.telefone);
       continue;
     }
     try {
@@ -57,6 +62,28 @@ export async function processarFollowups(deps: Deps): Promise<number> {
 
   const desde = adiarISO(agora, -FOLLOWUP_LIMITE_HORAS * HORA_S);
   const ate = adiarISO(agora, -FOLLOWUP_APOS_HORAS * HORA_S);
+
+  // Isolado: se a coluna do convite ainda não existe (migration 0011), só este passo falha.
+  let doConvite = 0;
+  try {
+    const candidatas = await deps.conversas.pendentesDeConvite(
+      adiarISO(agora, -CONVITE_LIMITE_MINUTOS * 60),
+      adiarISO(agora, -CONVITE_APOS_MINUTOS * 60),
+    );
+    doConvite = await enviarFollowups(
+      deps,
+      candidatas,
+      (c) => conviteDevido(c, agora),
+      (telefone) => {
+        const c = candidatas.find((x) => x.telefone === telefone);
+        return c?.propostaEnviadaEm ? deps.conversas.reivindicarConvite(telefone, agora, c.propostaEnviadaEm) : Promise.resolve(false);
+      },
+      MSG.conviteVisitaPosProposta,
+      (telefone) => deps.conversas.liberarConvite(telefone),
+    );
+  } catch (erro) {
+    console.error('processarFollowups: falha no convite de visita', erro);
+  }
 
   const daProposta = await enviarFollowups(
     deps,
@@ -79,5 +106,5 @@ export async function processarFollowups(deps: Deps): Promise<number> {
   } catch (erro) {
     console.error('processarFollowups: falha na retomada do orçamento', erro);
   }
-  return daProposta + daRetomada;
+  return doConvite + daProposta + daRetomada;
 }
