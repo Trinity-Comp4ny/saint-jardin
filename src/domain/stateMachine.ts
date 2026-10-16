@@ -10,6 +10,7 @@ import {
   type Conversa,
   type DiaSemana,
   type EntradaNLU,
+  type Intencao,
   type MensagemSaida,
   type PreferenciaDia,
   type Slots,
@@ -671,8 +672,8 @@ function qualificar(
   return avancarComData(base, slots, nlu, ctx);
 }
 
-/** Coloca `aviso` depois da abertura (texto + vídeo), antes da primeira mensagem do fluxo. */
-function inserirAviso(saidas: MensagemSaida[], aviso: MensagemSaida): MensagemSaida[] {
+/** Coloca `avisos` depois da abertura (texto + vídeo), antes da primeira mensagem do fluxo. */
+function inserirAvisos(saidas: MensagemSaida[], avisos: MensagemSaida[]): MensagemSaida[] {
   let i = 0;
   while (
     i < saidas.length &&
@@ -682,7 +683,58 @@ function inserirAviso(saidas: MensagemSaida[], aviso: MensagemSaida): MensagemSa
   ) {
     i++;
   }
-  return [...saidas.slice(0, i), aviso, ...saidas.slice(i)];
+  return [...saidas.slice(0, i), ...avisos, ...saidas.slice(i)];
+}
+
+const inserirAviso = (saidas: MensagemSaida[], aviso: MensagemSaida): MensagemSaida[] =>
+  inserirAvisos(saidas, [aviso]);
+
+// Intenções que têm fluxo próprio ou exigem a Raquel: a dúvida frequente não se mete.
+const INTENCOES_SEM_FAQ: Intencao[] = ['visita_tecnica', 'fornecedor', 'cliente_fechado', 'negociar', 'despedida'];
+
+/**
+ * Dúvida sobre hospedagem ou pacotes: responde com o texto da Raquel e deixa o fluxo seguir (na
+ * abertura, o texto entra depois do vídeo e antes da pergunta de orçamento). Pergunta de valor
+ * não tem texto próprio: o fluxo comercial já pede data e convidados.
+ */
+function responderDuvidas(conversa: Conversa, nlu: EntradaNLU, ctx: ContextoDecisao): ResultadoDecisao {
+  const semDuvidas: EntradaNLU = { ...nlu, duvidas: undefined };
+  const duvidas = nlu.duvidas ?? [];
+  const respostas: MensagemSaida[] = [];
+  if (duvidas.includes('hospedagem')) respostas.push(texto(MSG.faqHospedagem));
+  if (duvidas.includes('pacotes')) respostas.push(texto(MSG.faqPacotes));
+
+  const ignora =
+    INTENCOES_SEM_FAQ.includes(nlu.intencao) ||
+    conversa.estado === 'visita_tecnica_data' ||
+    // Na oferta do mini, a dúvida segue o caminho dela: PDF do mini e repasse à Raquel.
+    conversa.estado === 'aguardando_interesse_mini';
+  if (ignora) return decidir(conversa, semDuvidas, ctx);
+
+  // Combinando a visita: uma dúvida solta não é resposta ao "que dia fica melhor?", e o fluxo da
+  // visita trataria como "sem dia" e repassaria à Raquel. Responde a dúvida e, se perguntou valor,
+  // volta ao orçamento (a mesma mensagem de data e convidados).
+  const dandoDiaDaVisita = nlu.visita?.dataHora !== undefined || nlu.visita?.diaSemana !== undefined;
+  if (conversa.estado === 'aguardando_pref_visita' && !dandoDiaDaVisita) {
+    const slots = mesclarSlots(conversa.slots, { ...nlu.slots, nome: nlu.nomeDetectado ?? undefined });
+    const base: Conversa = { ...conversa, slots, atualizadoEm: ctx.agora, ultimaEntradaEm: ctx.agora };
+    if (!duvidas.includes('valores')) return { conversa: base, saidas: respostas };
+    // Sem nenhum dado de orçamento ainda: a mensagem de data da Raquel (regra de 16/10: tudo sobre
+    // valores recebe essa mensagem). Com dados, pede só o que falta.
+    const orcamento = temDadoDeOrcamento(slots)
+      ? qualificar({ ...base, estado: 'aguardando_qualificacao' }, slots, nlu, ctx)
+      : { conversa: { ...base, estado: 'aguardando_qualificacao' as const }, saidas: [texto(MSG.perguntaQualificadora)] };
+    return { conversa: orcamento.conversa, saidas: [...respostas, ...orcamento.saidas] };
+  }
+
+  const r = decidir(conversa, semDuvidas, ctx);
+  if (r.conversa.estado === 'handoff' || r.conversa.estado === 'humano') {
+    // Fechar a visita termina em handoff, e a resposta da dúvida ainda cabe antes. Nos outros
+    // repasses (a Raquel precisa assumir por outro motivo) o bot não se mete.
+    const fechouVisita = conversa.estado === 'aguardando_pref_visita';
+    return fechouVisita ? { conversa: r.conversa, saidas: [...respostas, ...r.saidas] } : r;
+  }
+  return { conversa: r.conversa, saidas: inserirAvisos(r.saidas, respostas) };
 }
 
 export function decidir(
@@ -712,6 +764,8 @@ export function decidir(
     const aviso = texto(MSG.agenda2029);
     return { conversa: r.conversa, saidas: inserirAviso(r.saidas, aviso) };
   }
+
+  if (nlu.duvidas !== undefined) return responderDuvidas(conversa, nlu, ctx);
 
   const slots = mesclarSlots(conversa.slots, {
     ...nlu.slots,

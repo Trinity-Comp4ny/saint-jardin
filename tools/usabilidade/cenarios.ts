@@ -120,4 +120,13 @@ export const CENARIOS: Cenario[] = [
   { id: 'F06', grupo: 'borda', titulo: 'agradece e some logo no início', turnos: ['oi', 'obrigada, depois eu volto'] },
   { id: 'F07', grupo: 'borda', titulo: 'cumprimenta com nome', turnos: ['Oi, aqui é a Júlia'] },
   { id: 'F08', grupo: 'borda', titulo: 'número no meio de frase sem contexto', pre: ['queria um orçamento'], turnos: ['somos 2 pessoas no momento mas a família é grande, sábado em 2028'] },
+
+  // ---------- Dúvidas frequentes (hospedagem, pacotes) ----------
+  { id: 'G01', grupo: 'dúvidas frequentes', titulo: 'orçamento + hospedagem no primeiro contato', turnos: ['Oi, queria um orçamento. Vocês têm hospedagem?'] },
+  { id: 'G02', grupo: 'dúvidas frequentes', titulo: 'print da Raquel: quer visitar e pergunta valores e hospedagem', pre: ['Estou querendo visitar alguns espaços para o meu casamento'], turnos: ['Nossa eu amei! E a tabela de valores? Vocês tem hospedagens?'] },
+  { id: 'G03', grupo: 'dúvidas frequentes', titulo: 'pacotes fechados na qualificação', pre: ['queria um orçamento'], turnos: ['vocês trabalham com pacotes fechados?'] },
+  { id: 'G04', grupo: 'dúvidas frequentes', titulo: 'hospedagem depois da proposta', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['e tem hospedagem para os convidados?'] },
+  { id: 'G05', grupo: 'dúvidas frequentes', titulo: 'pacotes depois da proposta', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['o buffet e a decoração já estão inclusos?'] },
+  { id: 'G06', grupo: 'dúvidas frequentes', titulo: 'suíte da noiva depois da proposta', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['tem suíte para a noiva se arrumar?'] },
+  { id: 'G07', grupo: 'dúvidas frequentes', titulo: 'pacote 3 continua indo para a Raquel', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['o pacote 3 inclui o quê?'] },
 ];
