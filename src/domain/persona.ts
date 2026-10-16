@@ -70,8 +70,23 @@ export const MSG = {
   // (é na visita que se negocia). O bot segue o fluxo normal com 2028, que manda o PDF.
   agenda2029:
     'Vamos abrir a agenda de 2029 em janeiro de 2027, mas já posso te enviar os valores de ' +
-    '2028 para você ter uma base e poder marcar uma visita. Aí a gente conversa sobre as ' +
-    'condições! ☺️',
+    '2028 para você ter uma ideia dos valores praticados e depois conversamos sobre as ' +
+    'condições para sua data. Segue:',
+
+  // Perguntas frequentes (textos literais da Raquel, 16/10/2026). Vão sempre sem humanizar:
+  // carregam capacidade (28 pessoas) e política (sem pacotes fechados).
+  faqHospedagem:
+    'Dispomos de suítes para hospedagem dos convidados, suíte da noiva, suíte do noivo e sala ' +
+    'das madrinhas. Hoje conseguimos hospedar até 28 pessoas, mas já temos mais suítes que serão ' +
+    'construídas dentro de um ano. Temos propostas para uma diária e para o final de semana ' +
+    'inteiro, incluindo também uma pizzada na sexta-feira para um pré wedding inesquecível! ✨🥹',
+
+  faqPacotes:
+    'Acreditamos que cada casamento merece ser único e ter a essência dos noivos! ✨\n\n' +
+    'Por isso, não trabalhamos com pacotes fechados de buffet, decoração e outros serviços, ' +
+    'dando a cada casal a liberdade de escolher tudo conforme seus sonhos. E, para ajudar nessa ' +
+    'escolha, indicamos excelentes fornecedores de nossa confiança aos clientes que fecham ' +
+    'contrato conosco!',
 
   // Proposta normal: a mensagem de ano (literal da Raquel) antecede o PDF do ano.
   // A descrição de inclusos saiu: vive dentro do PDF.

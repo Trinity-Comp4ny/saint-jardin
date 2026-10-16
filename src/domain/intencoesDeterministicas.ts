@@ -3,7 +3,7 @@
 // corrige a leitura aqui, e o modelo nunca é a única barreira de regras que importam
 // (cliente fechada, evento que não é casamento, problema com o PDF).
 
-import type { EntradaNLU, EstadoConversa, PreferenciaVisita, Slots } from './types';
+import type { Duvida, EntradaNLU, EstadoConversa, PreferenciaVisita, Slots } from './types';
 import { ehSaudacaoPura } from './texto';
 import { diaDaSemanaNoTexto, horaNoTexto, rotuloDiaSemana } from './visita';
 
@@ -31,6 +31,29 @@ const RE_CASAMENTO = new RegExp(`${L}(casamento|casar|casaremos|noiv\\w*|wedding
 const RE_PRECO = new RegExp(
   `${L}(valor(es)?|pre[çc]os?|quanto (custa|[ée]|fica|sai|cobram)|or[çc]amento|or[çc]ar|cota[çc][ãa]o|cotar|tabela)${R}`,
 );
+
+// Hospedagem dos convidados e das noivas. "acomodar" fica de fora: "acomoda 200 pessoas" é
+// capacidade do espaço, não hospedagem.
+const RE_HOSPEDAGEM = new RegExp(
+  `${L}(hosped\\w*|pousada|pernoit\\w*|dormir|dormem|alojamento|su[íi]tes?|quartos?|ch[aá]l[eé]s?)${R}`,
+);
+
+// Pacotes fechados / tudo incluso. Exige o sinal explícito: "pacote 3" é o pacote da proposta
+// (o PDF tem Pacote 1 a 3) e "pacote de hospedagem" é dúvida de hospedagem.
+const RE_PACOTES = new RegExp(
+  `${L}(pacotes?\\s+fechad\\w*|(tem|t[êe]m|trabalha|trabalham|oferece|oferecem|faz|fazem|vende|vendem|existe|possui|possuem)\\s+(com\\s+)?(algum\\s+|algum\\s+tipo\\s+de\\s+)?pacotes?(?!\\s*\\d)|tudo inclu(so|[ií]do)|(inclui|incluso|inclu[ií]do)\\s+(o\\s+)?(buffet|decora[çc][ãa]o)|(buffet|decora[çc][ãa]o)[^.?!]{0,30}${L}(inclus[oa]s?|inclu[ií]d[oa]s?))${R}`,
+);
+const RE_PACOTE_DE_HOSPEDAGEM = new RegExp(`${L}pacotes?\\s+(de|da|com|para)\\s+(hosped\\w*|su[íi]tes?|quartos?)${R}`);
+
+/** Dúvidas frequentes que o texto traz (sem olhar o modelo). */
+export function duvidasNoTexto(texto: string): Duvida[] {
+  const t = texto.toLowerCase();
+  const achadas: Duvida[] = [];
+  if (RE_HOSPEDAGEM.test(t)) achadas.push('hospedagem');
+  if (RE_PACOTES.test(t) && !RE_PACOTE_DE_HOSPEDAGEM.test(t)) achadas.push('pacotes');
+  if (RE_PRECO.test(t)) achadas.push('valores');
+  return achadas;
+}
 
 // Despedida cordial depois da proposta: "obrigada, vou olhar com calma", "depois eu volto".
 // O modelo oscila entre despedida e "seguir_fluxo" para a mesma frase.
@@ -68,11 +91,15 @@ function anoAindaFechado(texto: string): number | undefined {
 
 /** Corrige a leitura do modelo com o que o texto diz de forma inequívoca. */
 export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: EntradaNLU): EntradaNLU {
+  const duvidas = duvidasNoTexto(texto);
+  const comDuvidas = (e: EntradaNLU): EntradaNLU => (duvidas.length > 0 ? { ...e, duvidas } : e);
   if (ESTADOS_DE_VISITA.includes(estado)) {
-    return estado === 'aguardando_pref_visita' ? { ...entrada, visita: completarVisita(texto, entrada.visita) } : entrada;
+    return estado === 'aguardando_pref_visita'
+      ? comDuvidas({ ...entrada, visita: completarVisita(texto, entrada.visita) })
+      : entrada;
   }
   const t = texto.toLowerCase();
-  const e: EntradaNLU = { ...entrada };
+  const e: EntradaNLU = comDuvidas({ ...entrada });
   const comercial = ESTADOS_COMERCIAIS.includes(estado);
   // Pergunta de preço na oferta do mini também é pedir informação (o PDF do mini responde).
   const falaDePreco = comercial || estado === 'aguardando_interesse_mini';
@@ -89,6 +116,18 @@ export function ajustarEntrada(texto: string, estado: EstadoConversa, entrada: E
   }
 
   if (RE_INDECISO.test(t) && !e.afirmativo) e.indeciso = true;
+
+  // Pergunta sobre hospedagem ou pacotes: o bot responde com o texto da Raquel. O modelo chama isso
+  // de fora_do_script e a conversa caía em handoff mudo (teste de 16/10).
+  if (
+    (duvidas.includes('hospedagem') || duvidas.includes('pacotes')) &&
+    e.intencao === 'fora_do_script' &&
+    // Na oferta do mini a pergunta segue o caminho próprio (PDF do mini e repasse à Raquel).
+    estado !== 'aguardando_interesse_mini' &&
+    !(RE_NAO_CASAMENTO.test(t) && !RE_CASAMENTO.test(t))
+  ) {
+    e.intencao = 'seguir_fluxo';
+  }
 
   if (RE_VISITA_TECNICA.test(t) && ['fornecedor', 'seguir_fluxo', 'fora_do_script', 'agendar_visita'].includes(e.intencao)) {
     e.intencao = 'visita_tecnica';

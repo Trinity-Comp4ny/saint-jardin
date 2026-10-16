@@ -166,6 +166,9 @@ export interface MensagemSaida {
   humanizar?: boolean;
 }
 
+/** Dúvidas que o bot responde com texto pronto da Raquel, sem passar por handoff. */
+export type Duvida = 'hospedagem' | 'pacotes' | 'valores';
+
 /** Resultado da leitura da mensagem do lead pela camada de NLU. */
 export interface EntradaNLU {
   slots: Slots;
@@ -190,6 +193,12 @@ export interface EntradaNLU {
    * modelo: o schema de `slots.ano` só aceita 2027 e 2028 e descartava o resto em silêncio.
    */
   anoIndisponivel?: number;
+  /**
+   * Dúvidas frequentes citadas na mensagem (hospedagem, pacotes fechados, valores). Detectadas por
+   * regra, não pelo modelo: o modelo chamava "vocês têm hospedagem?" de fora_do_script e a
+   * conversa caía em handoff mudo.
+   */
+  duvidas?: Duvida[];
   /**
    * Visita técnica: o casamento que o fornecedor atende (data, noivos e o serviço dele).
    * Separado de `slots`, onde ficam só os dados de orçamento e a data da PRÓPRIA visita.
