@@ -43,7 +43,7 @@ export class GeminiRedator implements Redator {
 
   constructor(apiKey = process.env.GEMINI_API_KEY) {
     if (!apiKey) throw new Error('GEMINI_API_KEY ausente para GeminiRedator');
-    this.client = new GoogleGenAI({ apiKey });
+    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 20_000 } });
   }
 
   async humanizar(entrada: {

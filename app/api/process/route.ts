@@ -15,8 +15,8 @@ export async function POST(req: Request): Promise<Response> {
     return new Response('forbidden', { status: 403 });
   }
 
-  const { fila, transcriber, orquestrador } = montarProcessDeps();
-  const processados = await processarFila({ fila, transcriber, orquestrador });
+  const { fila, transcriber, orquestrador, trava } = montarProcessDeps();
+  const processados = await processarFila({ fila, transcriber, orquestrador, trava });
 
   // Follow-up da proposta (12h): isolado, uma falha aqui não derruba o resultado da fila.
   let followups = 0;

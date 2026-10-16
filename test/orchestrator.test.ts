@@ -194,3 +194,28 @@ describe('bot silencioso após handoff', () => {
     expect(todasSaidas().length).toBe(antes);
   });
 });
+
+describe('estado salvo antes do envio', () => {
+  it('se o envio morrer no meio, a próxima mensagem já enxerga a conversa avançada', async () => {
+    const conversas = new InMemoryConversaRepo();
+    const envioQueMorre = new SandboxProvider();
+    envioQueMorre.enviar = async () => {
+      throw new Error('função morta no meio do envio');
+    };
+    await expect(
+      processarMensagem(NOIVA, 'Vou me casar dia 27/03/2027, gostaria de um orçamento', {
+        ...deps,
+        conversas,
+        messaging: envioQueMorre,
+      }),
+    ).rejects.toThrow('função morta');
+
+    const salva = await conversas.obter(NOIVA);
+    expect(salva?.estado).not.toBe('novo');
+
+    // Próxima mensagem: não repete a abertura (saudação + vídeo).
+    const r = await processarMensagem(NOIVA, '150 convidados', { ...deps, conversas });
+    expect(r.saidas.some((s) => s.tipo === 'video')).toBe(false);
+    expect(r.saidas.some((s) => s.texto?.includes('Me chamo Raquel'))).toBe(false);
+  });
+});

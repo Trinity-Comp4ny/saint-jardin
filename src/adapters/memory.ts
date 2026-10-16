@@ -12,6 +12,7 @@ import type {
   MessagingProvider,
   Notifier,
   TipoMensagemLog,
+  TravaTurno,
 } from '../ports';
 import type { Contato, Conversa, MensagemSaida } from '../domain/types';
 
@@ -146,5 +147,22 @@ export class RecordingNotifier implements Notifier {
 
   async alertarHandoff(conversa: Conversa, motivo: string): Promise<void> {
     this.alertas.push({ telefone: conversa.telefone, motivo });
+  }
+}
+
+/** Trava por telefone em memória (sem expiração: os testes liberam sempre). */
+export class InMemoryTravaTurno implements TravaTurno {
+  private donos = new Map<string, string>();
+  private seq = 0;
+
+  async adquirir(telefone: string, _ttlSegundos: number): Promise<string | null> {
+    if (this.donos.has(telefone)) return null;
+    const token = `t${this.seq++}`;
+    this.donos.set(telefone, token);
+    return token;
+  }
+
+  async liberar(telefone: string, token: string): Promise<void> {
+    if (this.donos.get(telefone) === token) this.donos.delete(telefone);
   }
 }
