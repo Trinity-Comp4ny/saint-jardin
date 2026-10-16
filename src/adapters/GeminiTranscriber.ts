@@ -2,7 +2,8 @@
 // Gemini (mesmo provedor do NLU e do Redator, ver ADR-0007 — um único
 // provedor de LLM em vez de Groq + Gemini).
 
-import { GoogleGenAI } from '@google/genai';
+import type { GoogleGenAI } from '@google/genai';
+import { criarClienteGemini } from './geminiClient';
 import type { Transcriber } from '../ports';
 
 export interface GeminiTranscriberConfig {
@@ -16,7 +17,8 @@ export interface GeminiTranscriberConfig {
 // não há motivo para um modelo (ou provedor) à parte só para transcrever.
 const MODELO = 'gemini-flash-lite-latest';
 
-// Sem limite, uma chamada pendurada segura o turno até a função ser morta (60 s).
+// Sem limite, uma chamada pendurada segura o turno até a função ser morta (60 s). Vale para os
+// downloads da Meta; o cliente do Gemini tem timeout e retry próprios (geminiClient).
 const TIMEOUT_MS = 15_000;
 
 const SYSTEM =
@@ -29,7 +31,7 @@ export class GeminiTranscriber implements Transcriber {
   private client: GoogleGenAI;
 
   constructor(private readonly cfg: GeminiTranscriberConfig) {
-    this.client = new GoogleGenAI({ apiKey: cfg.geminiApiKey, httpOptions: { timeout: TIMEOUT_MS } });
+    this.client = criarClienteGemini(cfg.geminiApiKey, 10_000);
   }
 
   async transcrever(mediaId: string): Promise<string> {

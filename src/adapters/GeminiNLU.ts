@@ -2,7 +2,8 @@
 // (extrair dados e classificar intenção). A decisão do fluxo é da máquina de
 // estados, não do modelo. Barato e com saída estruturada (responseSchema).
 
-import { GoogleGenAI, Type } from '@google/genai';
+import { Type, type GoogleGenAI } from '@google/genai';
+import { criarClienteGemini } from './geminiClient';
 import { z } from 'zod';
 import type { MensagemLog, NLU } from '../ports';
 import type { Conversa, EntradaNLU } from '../domain/types';
@@ -244,7 +245,7 @@ export class GeminiNLU implements NLU {
 
   constructor(apiKey = process.env.GEMINI_API_KEY) {
     if (!apiKey) throw new Error('GEMINI_API_KEY ausente para GeminiNLU');
-    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 20_000 } });
+    this.client = criarClienteGemini(apiKey, 15_000);
   }
 
   async analisar(

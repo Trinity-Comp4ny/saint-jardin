@@ -3,7 +3,8 @@
 // inventar valores, datas ou condições. Só recebe textos-objetivo já sem preço
 // nem regra (a máquina de estados garante isso via a flag `humanizar`).
 
-import { GoogleGenAI } from '@google/genai';
+import type { GoogleGenAI } from '@google/genai';
+import { criarClienteGemini } from './geminiClient';
 import type { MensagemLog, Redator } from '../ports';
 import { formatarHistorico } from './GeminiNLU';
 import { decodificarEntidades } from '../domain/texto';
@@ -43,7 +44,7 @@ export class GeminiRedator implements Redator {
 
   constructor(apiKey = process.env.GEMINI_API_KEY) {
     if (!apiKey) throw new Error('GEMINI_API_KEY ausente para GeminiRedator');
-    this.client = new GoogleGenAI({ apiKey, httpOptions: { timeout: 20_000 } });
+    this.client = criarClienteGemini(apiKey, 10_000);
   }
 
   async humanizar(entrada: {
