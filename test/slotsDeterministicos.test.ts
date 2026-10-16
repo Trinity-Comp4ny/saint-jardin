@@ -124,3 +124,43 @@ describe('GeminiNLU com o piso determinístico', () => {
     expect(r.slots).toEqual({ ano: 2028, diaSemana: 'sabado', convidados: 200 });
   });
 });
+
+describe('completarSlots: faixa de convidados (teste da Raquel, 16/10)', () => {
+  const q = (t: string) => completarSlots(t, 'aguardando_qualificacao', {}).convidados;
+
+  it('a frase real do áudio: "100, 150, algo assim" vale o maior', () => {
+    expect(
+      q('Ai olha, eu também não sei direito a lista de convidados, mas acredito que 100, 150, algo assim. E acho que eu quero que seja num sábado.'),
+    ).toBe(150);
+  });
+
+  it.each([
+    ['de 100 a 150', 150],
+    ['entre 120 e 150 pessoas', 150],
+    ['uns 80 ou 90', 90],
+    ['100-150', 150],
+    ['mais ou menos 70, 90', 90],
+  ])('"%s"', (texto, esperado) => {
+    expect(q(texto)).toBe(esperado);
+  });
+
+  it.each([
+    '2028 ou 2029',
+    'dia 15 ou 20',
+    '15 e 16 de março',
+    'das 10 às 12h',
+    'sábado 27/03, 150 pessoas e 30 crianças',
+    'só o ano, 2027, 2028',
+  ])('"%s" não vira faixa de convidados', (texto) => {
+    const n = q(texto);
+    expect([undefined, 150]).toContain(n); // só o "150 pessoas" explícito vale
+  });
+
+  it('não vale fora da qualificação (ex.: combinando a visita)', () => {
+    expect(completarSlots('às 10 ou 11', 'aguardando_pref_visita', {}).convidados).toBeUndefined();
+  });
+
+  it('o que o LLM preencheu vence', () => {
+    expect(completarSlots('100, 150', 'aguardando_qualificacao', { convidados: 120 }).convidados).toBe(120);
+  });
+});

@@ -25,7 +25,7 @@ Origem: pedidos da Raquel de 16/10/2026 ([material](../01-descoberta/material-20
 ## Fora de escopo
 
 - Follow-up 2 (uma semana): texto recebido, falta template da Meta.
-- PDF ou valores de hospedagem de convidados: não existem nos PDFs atuais.
+- PDF de hospedagem: não é necessário. Os pacotes 1 a 3 já estão nos PDFs das propostas (esclarecido pela Raquel em 16/10).
 
 ## Verificação
 

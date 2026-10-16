@@ -762,6 +762,21 @@ export function decidir(
     const jaAvisou = conversa.slots.anoSolicitado !== undefined;
     if (jaAvisou) return r;
     const aviso = texto(MSG.agenda2029);
+    // Já recebeu a proposta de 2028 e pede 2029: o fluxo não tem nada novo a mandar e o aviso termina
+    // em "Segue:" com nada depois (print da Raquel, 16/10). Reenvia a proposta de 2028.
+    if (conversa.estado === 'proposta_enviada' && !r.saidas.some((s) => s.tipo === 'pdf')) {
+      const reenvio = ehMiniWedding(r.conversa.slots)
+        ? {
+            conversa: propostaEnviada(r.conversa),
+            saidas: [
+              texto(MSG.miniInformacoes),
+              { tipo: 'pdf' as const, pdf: 'proposta_mini' as const },
+              texto(MSG.conviteVisitaPosProposta),
+            ],
+          }
+        : enviarPropostaNormal(r.conversa, 2028);
+      return { conversa: reenvio.conversa, saidas: [aviso, ...reenvio.saidas] };
+    }
     return { conversa: r.conversa, saidas: inserirAviso(r.saidas, aviso) };
   }
 
