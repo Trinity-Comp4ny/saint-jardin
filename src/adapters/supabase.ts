@@ -13,6 +13,7 @@ import type {
   MensagemLog,
   MensagemRepo,
   TipoMensagemLog,
+  TravaTurno,
 } from '../ports';
 import type {
   Contato,
@@ -291,6 +292,14 @@ export class SupabaseFila implements Fila {
       .eq('id', id);
   }
 
+  async devolver(id: string): Promise<void> {
+    const { error } = await this.db
+      .from('fila_mensagens')
+      .update({ processado_em: null })
+      .eq('id', id);
+    if (error) throw new Error(`devolver: ${error.message}`);
+  }
+
   async contarRecentes(telefone: string, desdeISO: string): Promise<number> {
     const { count, error } = await this.db
       .from('fila_mensagens')
@@ -414,4 +423,38 @@ function mapConversa(r: LinhaConversa): Conversa {
     propostaEnviadaEm: r.proposta_enviada_em ?? undefined,
     followupEnviadoEm: r.followup_enviado_em ?? undefined,
   };
+}
+
+/**
+ * Trava por telefone sobre a tabela `turno_trava` (migration 0010). A chave
+ * primária decide quem vence: dois `insert` simultâneos, só um passa. Se a tabela
+ * ainda não existe (código no ar antes da migration), lança e o pipeline segue
+ * sem trava, como antes.
+ */
+export class SupabaseTravaTurno implements TravaTurno {
+  constructor(private readonly db: SupabaseClient) {}
+
+  async adquirir(telefone: string, ttlSegundos: number): Promise<string | null> {
+    const agora = new Date();
+    // Limpa só a trava vencida deste telefone (turno que morreu sem liberar).
+    await this.db
+      .from('turno_trava')
+      .delete()
+      .eq('telefone', telefone)
+      .lt('expira_em', agora.toISOString());
+
+    const dono = crypto.randomUUID();
+    const { error } = await this.db.from('turno_trava').insert({
+      telefone,
+      dono,
+      expira_em: new Date(agora.getTime() + ttlSegundos * 1000).toISOString(),
+    });
+    if (!error) return dono;
+    if (error.code === '23505') return null; // já existe trava viva
+    throw new Error(`adquirir trava: ${error.message}`);
+  }
+
+  async liberar(telefone: string, token: string): Promise<void> {
+    await this.db.from('turno_trava').delete().eq('telefone', telefone).eq('dono', token);
+  }
 }

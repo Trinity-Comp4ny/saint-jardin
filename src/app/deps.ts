@@ -16,12 +16,13 @@ import {
   SupabaseConversaRepo,
   SupabaseEventStore,
   SupabaseFila,
+  SupabaseTravaTurno,
   SupabaseMensagemRepo,
   criarSupabase,
 } from '../adapters/supabase';
 import { PDF_CATALOGO, VIDEO_CATALOGO } from '../domain/pdfs';
 import type { TipoPdf, TipoVideo } from '../domain/types';
-import type { EventStore, Fila, Notifier, Transcriber } from '../ports';
+import type { EventStore, Fila, Notifier, Transcriber, TravaTurno } from '../ports';
 import type { Deps } from './orchestrator';
 
 function obrigatorio(nome: string): string {
@@ -74,6 +75,7 @@ export interface ProcessAppDeps {
   orquestrador: Deps;
   fila: Fila;
   transcriber: Transcriber;
+  trava: TravaTurno;
 }
 
 export function montarProcessDeps(): ProcessAppDeps {
@@ -127,6 +129,7 @@ export function montarProcessDeps(): ProcessAppDeps {
   return {
     orquestrador,
     fila: new SupabaseFila(db),
+    trava: new SupabaseTravaTurno(db),
     transcriber: new GeminiTranscriber({ geminiApiKey, whatsappToken }),
   };
 }

@@ -4,18 +4,21 @@ import type { Deps } from '../src/app/orchestrator';
 import {
   InMemoryContatoRepo,
   InMemoryConversaRepo,
+  InMemoryTravaTurno,
   MockCalendario,
   RecordingNotifier,
   SandboxProvider,
 } from '../src/adapters/memory';
-import type { EventStore, Fila, ItemFila, NLU, Transcriber } from '../src/ports';
+import type { EventStore, Fila, ItemFila, NLU, Transcriber, TravaTurno } from '../src/ports';
 import type { Conversa, EntradaNLU } from '../src/domain/types';
 import { MSG } from '../src/domain/persona';
 
-function filaCom(itens: ItemFila[]): { fila: Fila; processados: string[] } {
+function filaCom(itens: ItemFila[]): { fila: Fila; processados: string[]; devolvidos: string[] } {
   const processados: string[] = [];
+  const devolvidos: string[] = [];
   return {
     processados,
+    devolvidos,
     fila: {
       async enfileirar() {},
       async pegarVencidas() {
@@ -23,6 +26,9 @@ function filaCom(itens: ItemFila[]): { fila: Fila; processados: string[] } {
       },
       async marcarProcessado(id) {
         processados.push(id);
+      },
+      async devolver(id) {
+        devolvidos.push(id);
       },
       async contarRecentes() {
         return 0;
@@ -359,6 +365,7 @@ function filaParaIngestao(contarRecentesRetorno = 0): {
         return [];
       },
       async marcarProcessado() {},
+      async devolver() {},
       async contarRecentes() {
         return contarRecentesRetorno;
       },
@@ -385,6 +392,7 @@ describe('ingerirWebhook — falha depois do dedup solta a marca (mensagem não 
         return [];
       },
       async marcarProcessado() {},
+      async devolver() {},
       async contarRecentes() {
         return 0;
       },
@@ -550,5 +558,114 @@ describe('processarFila — figurinha/reação/imagem (tipo "outro") avisa em ve
     expect(
       messaging.enviadas.some((e) => e.saidas.some((s) => s.texto === MSG.tipoNaoSuportado)),
     ).toBe(false); // não soma aviso extra: ela já teve resposta de verdade
+  });
+});
+
+describe('processarFila — um turno por telefone por vez', () => {
+  it('dois processamentos simultâneos do mesmo telefone rodam em sequência, não em paralelo', async () => {
+    const trava = new InMemoryTravaTurno();
+    const emAndamento: number[] = [];
+    let ativos = 0;
+    let pico = 0;
+    const nlu: NLU = {
+      async analisar(): Promise<EntradaNLU> {
+        ativos++;
+        pico = Math.max(pico, ativos);
+        emAndamento.push(ativos);
+        await new Promise((r) => setTimeout(r, 20));
+        ativos--;
+        return { slots: {}, intencao: 'seguir_fluxo' };
+      },
+    };
+    const deps = (itens: ItemFila[]) => ({
+      fila: filaCom(itens).fila,
+      transcriber: transcriberNoop,
+      orquestrador: orquestrador(nlu),
+      trava,
+      pausar: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 5))),
+    });
+
+    await Promise.all([
+      processarFila(deps([item('1', '5511999', 'oi')])),
+      processarFila(deps([item('2', '5511999', '150 convidados')])),
+    ]);
+
+    expect(pico).toBe(1);
+    expect(emAndamento).toEqual([1, 1]);
+  });
+
+  it('telefones diferentes não esperam um pelo outro', async () => {
+    const trava = new InMemoryTravaTurno();
+    const { fila } = filaCom([item('1', '5511111', 'oi'), item('2', '5522222', 'olá')]);
+    const { nlu, textos } = nluEspiao();
+
+    const turnos = await processarFila({
+      fila,
+      transcriber: transcriberNoop,
+      orquestrador: orquestrador(nlu),
+      trava,
+    });
+
+    expect(turnos).toBe(2);
+    expect(textos).toHaveLength(2);
+  });
+
+  it('desiste da espera, devolve os itens à fila e não os marca como processados', async () => {
+    const trava = new InMemoryTravaTurno();
+    await trava.adquirir('5511999', 65); // outro turno segura o número
+    const { fila, processados, devolvidos } = filaCom([
+      item('1', '5511999', 'oi'),
+      item('2', '5511999', '150 convidados'),
+    ]);
+    const { nlu, textos } = nluEspiao();
+
+    const turnos = await processarFila({
+      fila,
+      transcriber: transcriberNoop,
+      orquestrador: orquestrador(nlu),
+      trava,
+      esperaTravaMs: 3000,
+      pausar: async () => {},
+    });
+
+    expect(turnos).toBe(0);
+    expect(textos).toHaveLength(0);
+    expect(devolvidos).toEqual(['1', '2']);
+    expect(processados).toEqual([]);
+  });
+
+  it('libera a trava ao fim do turno, mesmo quando o turno falha', async () => {
+    const trava = new InMemoryTravaTurno();
+    const nluQuebrado: NLU = {
+      async analisar(): Promise<EntradaNLU> {
+        throw new Error('gemini fora do ar');
+      },
+    };
+    const { fila } = filaCom([item('1', '5511999', 'oi')]);
+
+    await processarFila({ fila, transcriber: transcriberNoop, orquestrador: orquestrador(nluQuebrado), trava });
+
+    expect(await trava.adquirir('5511999', 65)).not.toBeNull();
+  });
+
+  it('se a trava em si falha, o turno segue sem ela (não perde a resposta)', async () => {
+    const travaQuebrada: TravaTurno = {
+      async adquirir() {
+        throw new Error('tabela turno_trava ausente');
+      },
+      async liberar() {},
+    };
+    const { fila } = filaCom([item('1', '5511999', 'oi')]);
+    const { nlu, textos } = nluEspiao();
+
+    const turnos = await processarFila({
+      fila,
+      transcriber: transcriberNoop,
+      orquestrador: orquestrador(nlu),
+      trava: travaQuebrada,
+    });
+
+    expect(turnos).toBe(1);
+    expect(textos).toEqual(['oi']);
   });
 });

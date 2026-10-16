@@ -16,6 +16,9 @@ export interface GeminiTranscriberConfig {
 // não há motivo para um modelo (ou provedor) à parte só para transcrever.
 const MODELO = 'gemini-flash-lite-latest';
 
+// Sem limite, uma chamada pendurada segura o turno até a função ser morta (60 s).
+const TIMEOUT_MS = 15_000;
+
 const SYSTEM =
   'Você transcreve áudios em português brasileiro. Devolva SOMENTE o texto ' +
   'falado, literal: sem resumir, sem corrigir gramática, sem comentários, sem ' +
@@ -26,7 +29,7 @@ export class GeminiTranscriber implements Transcriber {
   private client: GoogleGenAI;
 
   constructor(private readonly cfg: GeminiTranscriberConfig) {
-    this.client = new GoogleGenAI({ apiKey: cfg.geminiApiKey });
+    this.client = new GoogleGenAI({ apiKey: cfg.geminiApiKey, httpOptions: { timeout: TIMEOUT_MS } });
   }
 
   async transcrever(mediaId: string): Promise<string> {
@@ -52,6 +55,7 @@ export class GeminiTranscriber implements Transcriber {
     const versao = this.cfg.versaoGraph ?? 'v21.0';
     const metaResp = await fetch(`https://graph.facebook.com/${versao}/${mediaId}`, {
       headers: { Authorization: `Bearer ${this.cfg.whatsappToken}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!metaResp.ok) {
       throw new Error(`Meta media ${metaResp.status}: ${await metaResp.text()}`);
@@ -61,6 +65,7 @@ export class GeminiTranscriber implements Transcriber {
 
     const bin = await fetch(url, {
       headers: { Authorization: `Bearer ${this.cfg.whatsappToken}` },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!bin.ok) throw new Error(`Download de mídia ${bin.status}`);
     // A Meta manda "audio/ogg; codecs=opus"; o Gemini só aceita o mime type puro.

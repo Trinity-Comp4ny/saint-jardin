@@ -6,6 +6,9 @@ import { PDF_CATALOGO, VIDEO_CATALOGO } from '../domain/pdfs';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Sem limite, um fetch pendurado segura o turno até a função ser morta (60 s).
+const TIMEOUT_MS = 15_000;
+
 export interface WhatsAppConfig {
   phoneNumberId: string;
   token: string;
@@ -126,6 +129,7 @@ export class WhatsAppCloudProvider implements MessagingProvider {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!resp.ok) {
       const detalhe = await resp.text();

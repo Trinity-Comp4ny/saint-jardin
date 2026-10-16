@@ -185,6 +185,27 @@ export interface Fila {
   enfileirar(item: Omit<ItemFila, 'id'>): Promise<void>;
   pegarVencidas(agoraISO: string, limite: number): Promise<ItemFila[]>;
   marcarProcessado(id: string): Promise<void>;
+  /**
+   * Devolve à fila um item já reivindicado (volta a ser pendente). Usado quando o
+   * turno não pôde começar porque outro do mesmo telefone ainda está rodando.
+   */
+  devolver(id: string): Promise<void>;
   /** Nº de itens enfileirados por esse telefone desde `desdeISO` (rate limit). */
   contarRecentes(telefone: string, desdeISO: string): Promise<number>;
+}
+
+/**
+ * Trava por telefone: só um turno por vez para o mesmo número. Sem ela, duas
+ * mensagens seguidas rodavam em paralelo, cada uma lendo o estado da conversa
+ * antes da outra salvar (resposta repetida, dado perdido).
+ */
+export interface TravaTurno {
+  /**
+   * Tenta assumir o turno do telefone. Devolve o token do dono, ou `null` se
+   * outro turno está em andamento. A trava expira sozinha após `ttlSegundos`,
+   * para um turno que morreu no meio não bloquear o número para sempre.
+   */
+  adquirir(telefone: string, ttlSegundos: number): Promise<string | null>;
+  /** Solta a trava, só se o token ainda for o dono (não derruba a de outro turno). */
+  liberar(telefone: string, token: string): Promise<void>;
 }

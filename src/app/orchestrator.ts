@@ -220,6 +220,12 @@ export async function processarMensagem(
   // (só as conversacionais; preço/proposta/regra vão literais).
   const saidasFinais = await humanizarSaidas(deps, saidas, texto, historico, conversa.slots.nome);
 
+  // Salva o estado ANTES de enviar: o envio é lento (o vídeo tem pausa de 10 s) e,
+  // se o turno morrer no meio, a próxima mensagem da noiva precisa enxergar a
+  // conversa já avançada. Salvar só no fim fazia o bot recomeçar do zero e repetir
+  // a abertura (16/10/2026).
+  await deps.conversas.salvar(conversa);
+
   // Read/unread + "digitando" na caixa da Raquel. Só marcamos lido quando o bot
   // resolve o turno (não é handoff): conversa que precisa da Raquel fica não lida.
   const botResolveu = conversa.estado !== 'handoff' && conversa.estado !== 'humano';
@@ -247,7 +253,6 @@ export async function processarMensagem(
     // Resolveu em silêncio (ex.: 'encerrada' já quieta): marca lido, sem digitar.
     await deps.messaging.marcarLido(messageId);
   }
-  await deps.conversas.salvar(conversa);
   // conversaAtual nunca é 'handoff' aqui (guardado no topo), então basta olhar o novo estado.
   // Vale para a visita da noiva e a técnica: ambas terminam em handoff com o motivo pronto.
   if (conversa.estado === 'handoff') {

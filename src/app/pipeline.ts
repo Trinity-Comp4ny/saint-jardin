@@ -6,7 +6,7 @@ import { contemComandoReset, processarMensagem, type Deps } from './orchestrator
 import { novaConversa } from '../domain/stateMachine';
 import { MSG } from '../domain/persona';
 import type { Conversa } from '../domain/types';
-import type { EventStore, Fila, Transcriber } from '../ports';
+import type { EventStore, Fila, Transcriber, TravaTurno } from '../ports';
 
 /** Adiciona `segundos` a um instante ISO. Puro (testável). */
 export function adiarISO(agoraISO: string, segundos: number): string {
@@ -121,11 +121,59 @@ export async function ingerirWebhook(body: unknown, deps: IngestDeps): Promise<n
   return enfileiradas;
 }
 
+// A trava vive mais que o maxDuration das rotas (60 s): um turno que morreu sem
+// liberar não bloqueia o número por mais que isso. Quem espera desiste antes do
+// próprio maxDuration, devolve os itens à fila e deixa o próximo ciclo tentar.
+const TRAVA_TTL_SEGUNDOS = 65;
+const TRAVA_ESPERA_MS = 45_000;
+const TRAVA_INTERVALO_MS = 1_000;
+
+const pausaReal = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 export interface ProcessDeps {
   fila: Fila;
   transcriber: Transcriber;
   orquestrador: Deps;
   limite?: number;
+  /** Um turno por telefone por vez. Ausente = sem trava (sandbox e testes simples). */
+  trava?: TravaTurno;
+  /** Espera máxima pela trava de outro turno (injetável para testes). */
+  esperaTravaMs?: number;
+  /** Pausa entre tentativas de pegar a trava (injetável para testes). */
+  pausar?: (ms: number) => Promise<void>;
+}
+
+/**
+ * Espera o turno anterior do mesmo telefone terminar e assume a trava. Devolve a
+ * função que libera, ou `null` se estourou a espera. Se a própria trava falhar
+ * (tabela ausente, banco fora), segue sem ela: perder a resposta de uma noiva
+ * é pior que o risco de sobreposição que a trava evita.
+ */
+async function assumirTurno(deps: ProcessDeps, telefone: string): Promise<(() => Promise<void>) | null> {
+  const semTrava = async () => {};
+  if (!deps.trava) return semTrava;
+  const pausar = deps.pausar ?? pausaReal;
+  const tentativas = Math.max(1, Math.ceil((deps.esperaTravaMs ?? TRAVA_ESPERA_MS) / TRAVA_INTERVALO_MS));
+
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const token = await deps.trava.adquirir(telefone, TRAVA_TTL_SEGUNDOS);
+      if (token) {
+        return async () => {
+          try {
+            await deps.trava!.liberar(telefone, token);
+          } catch {
+            // Sem liberar: a trava expira sozinha em TRAVA_TTL_SEGUNDOS.
+          }
+        };
+      }
+    } catch (erro) {
+      console.error(`processarFila: trava indisponível para ${telefone}, seguindo sem ela`, erro);
+      return semTrava;
+    }
+    if (i < tentativas - 1) await pausar(TRAVA_INTERVALO_MS);
+  }
+  return null;
 }
 
 /**
@@ -179,6 +227,19 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
 
   let turnos = 0;
   for (const [telefone, grupo] of grupos) {
+    const liberarTurno = await assumirTurno(deps, telefone);
+    if (!liberarTurno) {
+      // Outro turno deste número ainda roda: devolve os itens e o próximo ciclo
+      // (cron ou próxima mensagem) processa, já com o estado salvo pelo anterior.
+      for (const item of grupo) {
+        try {
+          await deps.fila.devolver(item.id);
+        } catch (erro) {
+          console.error(`processarFila: não devolveu o item ${item.id} à fila`, erro);
+        }
+      }
+      continue;
+    }
     try {
       // Conversa já com a Raquel: nem transcreve. Sem essa checagem, um número
       // que já caiu em handoff (ex.: pergunta fora do script) podia continuar
@@ -266,6 +327,7 @@ export async function processarFila(deps: ProcessDeps): Promise<number> {
       );
     } finally {
       for (const item of grupo) await deps.fila.marcarProcessado(item.id);
+      await liberarTurno();
     }
     turnos++;
   }
