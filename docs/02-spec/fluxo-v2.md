@@ -78,7 +78,13 @@ de ano que já existe (`avancarComData`).
 |---|---|---|---|
 | 1 | 12h após o envio da proposta, sem nenhuma mensagem da pessoa depois | Mensagem 1.7 do material (convite de visita) | Texto livre (dentro das 24h da Meta) |
 | 2 | 1 semana depois | Texto ainda não definido | **Template aprovado na Meta**, porque passa de 24h. **Fora de escopo** por decisão de 16/10: ficam só os de 12h |
+| Convite | 5 a 30 min depois do PDF da proposta, sem nenhuma mensagem da pessoa, das 8h às 20h | Mensagem 1.7 ("O que acharam da proposta?...") | Texto livre. Pedido da Raquel, 16/10. Antes saía junto do PDF |
 | Retomada | 12h depois da última mensagem da pessoa, em `aguardando_qualificacao` (parou antes de passar data ou convidados) | "Oi, gostaria de retomar o orçamento?" (proposta do Matheus, 16/10, a confirmar com a Raquel) | Texto livre (dentro das 24h da Meta) |
+
+O convite usa a coluna `convite_enviado_em` (migration `0011`; nulo depois de uma proposta = pendente). Se a
+pessoa responder antes dos 5 minutos sem pedir nada ("adorei!"), o convite sai logo depois da resposta do bot,
+uma vez só. Depois de 30 minutos ele não sai mais (cron parado, ou proposta à noite): quem cobre é o follow-up
+de 12h, que já traz o convite, e depois dele uma resposta solta também não repete o convite.
 
 A retomada usa as mesmas regras de tempo do follow-up 1 (12h a 23h30, 8h às 20h), contadas da última
 mensagem da pessoa, e reaproveita a coluna `followup_enviado_em` (a proposta a zera ao sair, então o

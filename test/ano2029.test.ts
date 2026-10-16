@@ -61,13 +61,13 @@ describe('ajustarEntrada: ano que a agenda ainda não abriu', () => {
 });
 
 describe('pediu 2029: avisa e usa 2028 como base', () => {
-  it('dia e convidados já sabidos: aviso, mensagem de ano 2028, PDF 2028 e convite', () => {
+  it('dia e convidados já sabidos: aviso, mensagem de ano 2028 e PDF 2028', () => {
     const r = decidir(
       conversaEm('aguardando_qualificacao', { diaSemana: 'sabado', convidados: 150 }),
       nlu({ anoIndisponivel: 2029 }),
       ctx,
     );
-    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf', 'texto']);
+    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf']);
     expect(r.saidas[0]?.texto).toBe(MSG.agenda2029);
     expect(r.saidas[0]?.texto).toMatch(/agenda de 2029 em janeiro de 2027/);
     expect(r.saidas[0]?.texto).toMatch(/valores de 2028/);
@@ -106,7 +106,7 @@ describe('pediu 2029: avisa e usa 2028 como base', () => {
       nlu({ anoIndisponivel: 2029 }),
       ctx,
     );
-    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf', 'texto']);
+    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf']);
     expect(r.saidas[0]?.texto).toBe(MSG.agenda2029);
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.conversa.slots.anoSolicitado).toBe(2029);
@@ -186,7 +186,7 @@ describe('2029 depois de a proposta de 2028 já ter sido enviada (print da Raque
     };
     const r = decidir(conversa, nlu({ anoIndisponivel: 2029, slots: {} }), ctx);
     expect(r.saidas[0]?.texto).toBe(MSG.agenda2029);
-    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf', 'texto']);
+    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf']);
     expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.conversa.slots.anoSolicitado).toBe(2029);
@@ -205,6 +205,7 @@ describe('2029 depois de a proposta de 2028 já ter sido enviada (print da Raque
     const conversa = {
       ...conversaEm('proposta_enviada', { ano: 2028, diaSemana: 'sabado', convidados: 150, anoSolicitado: 2029 }),
       propostaEnviadaEm: AGORA,
+      conviteEnviadoEm: AGORA,
     };
     const r = decidir(conversa, nlu({ anoIndisponivel: 2029, slots: {} }), ctx);
     expect(r.saidas).toEqual([]);

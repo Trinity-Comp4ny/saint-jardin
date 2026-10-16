@@ -93,11 +93,20 @@ export class SupabaseConversaRepo implements ConversaRepository {
   constructor(private readonly db: SupabaseClient) {}
 
   async obter(telefone: string): Promise<Conversa | null> {
-    const { data } = await this.db
+    let { data, error } = await this.db
       .from('conversas')
       .select(COLUNAS_CONVERSA)
       .eq('telefone', telefone)
       .maybeSingle();
+    // Migration 0011 ainda não rodou (o app e a migration sobem juntos no merge): lê sem a coluna.
+    // Sem isso a conversa "sumia" e o bot recomeçava do zero.
+    if (error && /convite_enviado_em/.test(error.message)) {
+      ({ data } = await this.db
+        .from('conversas')
+        .select(COLUNAS_CONVERSA_BASE)
+        .eq('telefone', telefone)
+        .maybeSingle());
+    }
     return data ? mapConversa(data) : null;
   }
 
@@ -125,6 +134,38 @@ export class SupabaseConversaRepo implements ConversaRepository {
       .select('telefone');
     if (error) throw new Error(`reivindicarFollowup: ${error.message}`);
     return (data?.length ?? 0) > 0;
+  }
+
+  async pendentesDeConvite(desdeISO: string, ateISO: string): Promise<Conversa[]> {
+    const { data, error } = await this.db
+      .from('conversas')
+      .select(COLUNAS_CONVERSA)
+      .eq('estado', 'proposta_enviada')
+      .is('convite_enviado_em', null)
+      .gte('proposta_enviada_em', desdeISO)
+      .lte('proposta_enviada_em', ateISO);
+    if (error) throw new Error(`pendentesDeConvite: ${error.message}`);
+    return (data ?? []).map(mapConversa);
+  }
+
+  async reivindicarConvite(telefone: string, agoraISO: string, propostaEnviadaEm: string): Promise<boolean> {
+    // Um turno novo grava ultima_entrada_em = agora, e a proposta grava o mesmo valor em
+    // proposta_enviada_em: `lte` só passa se a pessoa não escreveu depois da proposta.
+    const { data, error } = await this.db
+      .from('conversas')
+      .update({ convite_enviado_em: agoraISO })
+      .eq('telefone', telefone)
+      .eq('estado', 'proposta_enviada')
+      .is('convite_enviado_em', null)
+      .lte('ultima_entrada_em', propostaEnviadaEm)
+      .select('telefone');
+    if (error) throw new Error(`reivindicarConvite: ${error.message}`);
+    return (data?.length ?? 0) > 0;
+  }
+
+  async liberarConvite(telefone: string): Promise<void> {
+    const { error } = await this.db.from('conversas').update({ convite_enviado_em: null }).eq('telefone', telefone);
+    if (error) throw new Error(`liberarConvite: ${error.message}`);
   }
 
   async pendentesDeRetomada(desdeISO: string, ateISO: string): Promise<Conversa[]> {
@@ -174,9 +215,16 @@ export class SupabaseConversaRepo implements ConversaRepository {
       proposta_enviada_em: conversa.propostaEnviadaEm ?? null,
       followup_enviado_em: conversa.followupEnviadoEm ?? null,
     };
+    const comConvite = { ...linha, convite_enviado_em: conversa.conviteEnviadoEm ?? null };
     let { error } = await this.db
       .from('conversas')
-      .upsert({ ...linha, ...colunasDaVisitaTecnica(conversa.slots) }, { onConflict: 'telefone' });
+      .upsert({ ...comConvite, ...colunasDaVisitaTecnica(conversa.slots) }, { onConflict: 'telefone' });
+    // Migration 0011 ainda não rodou: salva sem a coluna do convite.
+    if (error && /convite_enviado_em/.test(error.message)) {
+      ({ error } = await this.db
+        .from('conversas')
+        .upsert({ ...linha, ...colunasDaVisitaTecnica(conversa.slots) }, { onConflict: 'telefone' }));
+    }
     // Migration 0009 ainda não rodou (o app e a migration sobem juntos no merge): salva sem as
     // colunas espelho. O estado da conversa nunca pode depender delas.
     if (error && /data_visita_tecnica|data_casamento|casamento_noivos|fornecedor_servico/.test(error.message)) {
@@ -423,8 +471,10 @@ function mapContato(r: LinhaContato): Contato {
   };
 }
 
-const COLUNAS_CONVERSA =
+// Sem `convite_enviado_em` (migration 0011): o que a leitura usa se a coluna ainda não existe.
+const COLUNAS_CONVERSA_BASE =
   'telefone, estado, slots, motivo_handoff, criado_em, atualizado_em, ultima_entrada_em, proposta_enviada_em, followup_enviado_em';
+const COLUNAS_CONVERSA = `${COLUNAS_CONVERSA_BASE}, convite_enviado_em`;
 
 interface LinhaConversa {
   telefone: string;
@@ -436,6 +486,7 @@ interface LinhaConversa {
   ultima_entrada_em: string | null;
   proposta_enviada_em: string | null;
   followup_enviado_em: string | null;
+  convite_enviado_em?: string | null;
 }
 
 function mapConversa(r: LinhaConversa): Conversa {
@@ -449,6 +500,7 @@ function mapConversa(r: LinhaConversa): Conversa {
     ultimaEntradaEm: r.ultima_entrada_em ?? undefined,
     propostaEnviadaEm: r.proposta_enviada_em ?? undefined,
     followupEnviadoEm: r.followup_enviado_em ?? undefined,
+    conviteEnviadoEm: r.convite_enviado_em ?? undefined,
   };
 }
 
