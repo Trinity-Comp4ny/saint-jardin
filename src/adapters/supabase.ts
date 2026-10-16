@@ -127,6 +127,33 @@ export class SupabaseConversaRepo implements ConversaRepository {
     return (data?.length ?? 0) > 0;
   }
 
+  async pendentesDeRetomada(desdeISO: string, ateISO: string): Promise<Conversa[]> {
+    const { data, error } = await this.db
+      .from('conversas')
+      .select(COLUNAS_CONVERSA)
+      .eq('estado', 'aguardando_qualificacao')
+      .is('followup_enviado_em', null)
+      .gte('ultima_entrada_em', desdeISO)
+      .lte('ultima_entrada_em', ateISO);
+    if (error) throw new Error(`pendentesDeRetomada: ${error.message}`);
+    return (data ?? []).map(mapConversa);
+  }
+
+  async reivindicarRetomada(telefone: string, agoraISO: string, ateISO: string): Promise<boolean> {
+    // Reusa followup_enviado_em (a proposta o zera ao sair). O `lte` garante que a pessoa não
+    // escreveu entre a consulta e agora: um turno novo grava ultima_entrada_em = agora.
+    const { data, error } = await this.db
+      .from('conversas')
+      .update({ followup_enviado_em: agoraISO })
+      .eq('telefone', telefone)
+      .eq('estado', 'aguardando_qualificacao')
+      .is('followup_enviado_em', null)
+      .lte('ultima_entrada_em', ateISO)
+      .select('telefone');
+    if (error) throw new Error(`reivindicarRetomada: ${error.message}`);
+    return (data?.length ?? 0) > 0;
+  }
+
   async liberarFollowup(telefone: string): Promise<void> {
     const { error } = await this.db
       .from('conversas')

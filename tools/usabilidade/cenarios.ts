@@ -129,4 +129,11 @@ export const CENARIOS: Cenario[] = [
   { id: 'G05', grupo: 'dúvidas frequentes', titulo: 'pacotes depois da proposta', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['o buffet e a decoração já estão inclusos?'] },
   { id: 'G06', grupo: 'dúvidas frequentes', titulo: 'suíte da noiva depois da proposta', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['tem suíte para a noiva se arrumar?'] },
   { id: 'G07', grupo: 'dúvidas frequentes', titulo: 'pacote 3 continua indo para a Raquel', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['o pacote 3 inclui o quê?'] },
+
+  // ---------- Depois da retomada do orçamento (follow-up de quem não passou os dados) ----------
+  { id: 'H01', grupo: 'retomada do orçamento', titulo: 'responde "sim"', pre: ['queria um orçamento', '@followup'], turnos: ['sim'] },
+  { id: 'H02', grupo: 'retomada do orçamento', titulo: 'responde "não, obrigada"', pre: ['queria um orçamento', '@followup'], turnos: ['não, obrigada'] },
+  { id: 'H03', grupo: 'retomada do orçamento', titulo: 'responde com os dados de uma vez', pre: ['queria um orçamento', '@followup'], turnos: ['sim! 2028, sábado, 150 pessoas'] },
+  { id: 'H04', grupo: 'retomada do orçamento', titulo: 'pede para voltar depois', pre: ['queria um orçamento', '@followup'], turnos: ['agora não consigo, depois eu volto'] },
+  { id: 'H05', grupo: 'retomada do orçamento', titulo: 'pergunta de hospedagem em vez de responder', pre: ['queria um orçamento', '@followup'], turnos: ['vocês têm hospedagem?'] },
 ];

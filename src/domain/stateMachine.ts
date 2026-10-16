@@ -912,6 +912,9 @@ export function decidir(
     }
 
     case 'aguardando_qualificacao':
+      // Já recebeu a retomada do orçamento (follow-up) e disse que não quer: encerra com cordialidade
+      // em vez de pedir de novo a data e os convidados.
+      if (conversa.followupEnviadoEm && nlu.negativo && !trouxeDadoDeOrcamento(nlu)) return encerrar();
       return qualificar(base, slots, nlu, ctx);
 
     case 'aguardando_interesse_mini':

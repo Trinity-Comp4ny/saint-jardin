@@ -35,6 +35,19 @@ export function dentroDaJanelaDeEnvio(agoraISO: string): boolean {
 }
 
 /**
+ * A retomada do orçamento está devida? É o follow-up de quem parou de responder ANTES da proposta:
+ * ficou em `aguardando_qualificacao` (faltava data ou convidados). Mesmas regras de tempo do
+ * follow-up da proposta, contadas da última mensagem da pessoa (é dela que a Meta conta as 24h).
+ * `followupEnviadoEm` é zerado quando a proposta sai, então o follow-up da proposta segue valendo.
+ */
+export function retomadaDevida(c: Conversa, agoraISO: string): boolean {
+  if (c.estado !== 'aguardando_qualificacao' || c.followupEnviadoEm || !c.ultimaEntradaEm) return false;
+  const idadeHoras = (new Date(agoraISO).getTime() - new Date(c.ultimaEntradaEm).getTime()) / HORA_MS;
+  if (idadeHoras < FOLLOWUP_APOS_HORAS || idadeHoras > FOLLOWUP_LIMITE_HORAS) return false;
+  return dentroDaJanelaDeEnvio(agoraISO);
+}
+
+/**
  * O follow-up desta conversa está devido agora? Só em `proposta_enviada`, uma vez
  * por proposta, com a pessoa em silêncio desde o envio, passadas 12h e ainda
  * dentro das 24h da Meta, na janela de horário.
