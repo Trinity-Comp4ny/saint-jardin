@@ -30,7 +30,7 @@ A causa de a execução ter morrido não foi determinada (sem acesso aos logs da
 - Se a própria trava falhar (tabela ausente durante o deploy, banco fora), o turno segue sem ela: perder a
   resposta de uma noiva é pior que o risco de sobreposição.
 - Chamadas externas ganham timeout para um `fetch` pendurado não segurar o turno até a função ser morta:
-  15 s na Graph API, e no Gemini 10 s (transcrição e Redator) e 15 s (NLU) por chamada.
+  15 s na Graph API, e no Gemini 10 s (transcrição e Redator) e 10 s (NLU) por chamada.
 - O Gemini tenta de novo em erro passageiro (408, 429, 500, 502, 503, 504 e timeout), 3 chamadas no total
   (`src/adapters/geminiClient.ts`). O retry do SDK é opt-in: sem ele, um 503 de um segundo virava handoff
   mudo (visto em teste local em 16/10/2026).

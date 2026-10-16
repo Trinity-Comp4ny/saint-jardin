@@ -37,6 +37,31 @@ function diaDaSemana(t: string): Pick<Slots, 'diaSemana' | 'preferenciaDia'> {
 
 const FAIXA_CONVIDADOS = (n: number): boolean => n >= 10 && n <= 5000;
 
+const MESES = 'janeiro|fevereiro|mar[çc]o|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro';
+// "100, 150", "de 100 a 150", "entre 120 e 150", "80 ou 90". Nunca data ("15 e 16 de março", "dia 15 ou 20"),
+// hora ("10 às 12h") nem ano ("2028 ou 2029").
+const RE_FAIXA = new RegExp(
+  `(?<![\\d/:.])(\\d{2,4})\\s*(?:,|\\s+a|\\s+à|\\s+até|\\s+ou|\\s+e|\\s*-)\\s*(\\d{2,4})(?![\\d/:]|\\s*(?:h|hs|horas|anos|dias|meses|%|de\\s+(?:${MESES})))`,
+  'g',
+);
+
+/**
+ * Faixa de convidados ("100, 150, algo assim"): vale o maior, que é o que decide a proposta (mini wedding
+ * é até 80 e o limite sentado é 240). O LLM às vezes não lê a faixa e o bot perguntava de novo o que a
+ * pessoa já tinha dito (teste da Raquel, 16/10).
+ */
+function faixaDeConvidados(t: string): number | undefined {
+  for (const m of t.matchAll(RE_FAIXA)) {
+    const antes = t.slice(Math.max(0, (m.index ?? 0) - 6), m.index ?? 0);
+    if (/(?<![a-zà-ú])(dia|dias|às|as)\s*$/.test(antes)) continue;
+    const [a, b] = [Number(m[1]), Number(m[2])];
+    const ehAno = (n: number) => n >= 2026 && n <= 2035;
+    if (ehAno(a) || ehAno(b) || !FAIXA_CONVIDADOS(a) || !FAIXA_CONVIDADOS(b)) continue;
+    return Math.max(a, b);
+  }
+  return undefined;
+}
+
 function convidados(t: string, qualificando: boolean): number | undefined {
   const m = t.match(/(\d{1,4})\s*(?:convidados|pessoas|adultos)(?![a-zà-ú])/);
   if (m) {
@@ -45,6 +70,8 @@ function convidados(t: string, qualificando: boolean): number | undefined {
     return FAIXA_CONVIDADOS(n) ? n : undefined;
   }
   if (!qualificando) return undefined;
+  const faixa = faixaDeConvidados(t);
+  if (faixa !== undefined) return faixa;
   // "uns 40", "cerca de 120": aproximação sem a palavra "pessoas". Só enquanto ela diz o
   // tamanho do evento, e nunca um ano, hora ou data.
   const aprox = t.match(

@@ -98,13 +98,15 @@ describe('pediu 2029: avisa e usa 2028 como base', () => {
     expect(r.conversa.estado).toBe('aguardando_interesse_mini');
   });
 
-  it('depois da proposta de 2028, "e para 2029?" só recebe o aviso (não reenvia o PDF)', () => {
+  it('depois da proposta de 2028, "e para 2029?" recebe o aviso e a proposta de 2028 de novo', () => {
+    // Antes só o aviso saía, quando o texto não terminava em "Segue:". Com o texto de 16/10 isso deixava
+    // o "Segue:" no ar (print da Raquel), então a proposta de 2028 é reenviada.
     const r = decidir(
       conversaEm('proposta_enviada', { ano: 2028, diaSemana: 'sabado', convidados: 150 }),
       nlu({ anoIndisponivel: 2029 }),
       ctx,
     );
-    expect(tipos(r)).toEqual(['texto']);
+    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf', 'texto']);
     expect(r.saidas[0]?.texto).toBe(MSG.agenda2029);
     expect(r.conversa.estado).toBe('proposta_enviada');
     expect(r.conversa.slots.anoSolicitado).toBe(2029);
@@ -173,5 +175,38 @@ describe('2030 em diante: passa para a Raquel em silêncio', () => {
     const r = decidir(conversaEm('aguardando_qualificacao'), nlu({ intencao: 'fora_do_script' }), ctx);
     expect(r.conversa.estado).toBe('handoff');
     expect(r.saidas).toHaveLength(0);
+  });
+});
+
+describe('2029 depois de a proposta de 2028 já ter sido enviada (print da Raquel, 16/10)', () => {
+  it('reenvia a proposta de 2028 em vez de deixar o "Segue:" no ar', () => {
+    const conversa = {
+      ...conversaEm('proposta_enviada', { ano: 2028, diaSemana: 'sabado', convidados: 150 }),
+      propostaEnviadaEm: AGORA,
+    };
+    const r = decidir(conversa, nlu({ anoIndisponivel: 2029, slots: {} }), ctx);
+    expect(r.saidas[0]?.texto).toBe(MSG.agenda2029);
+    expect(tipos(r)).toEqual(['texto', 'texto', 'pdf', 'texto']);
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_2028');
+    expect(r.conversa.estado).toBe('proposta_enviada');
+    expect(r.conversa.slots.anoSolicitado).toBe(2029);
+  });
+
+  it('proposta do mini enviada: reenvia o PDF do mini', () => {
+    const conversa = {
+      ...conversaEm('proposta_enviada', { ano: 2028, preferenciaDia: 'dia_de_semana', convidados: 50 }),
+      propostaEnviadaEm: AGORA,
+    };
+    const r = decidir(conversa, nlu({ anoIndisponivel: 2029, slots: {} }), ctx);
+    expect(r.saidas.find((s) => s.tipo === 'pdf')?.pdf).toBe('proposta_mini');
+  });
+
+  it('pedir 2029 de novo não repete o aviso nem o PDF', () => {
+    const conversa = {
+      ...conversaEm('proposta_enviada', { ano: 2028, diaSemana: 'sabado', convidados: 150, anoSolicitado: 2029 }),
+      propostaEnviadaEm: AGORA,
+    };
+    const r = decidir(conversa, nlu({ anoIndisponivel: 2029, slots: {} }), ctx);
+    expect(r.saidas).toEqual([]);
   });
 });

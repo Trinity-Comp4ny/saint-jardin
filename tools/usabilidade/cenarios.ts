@@ -136,4 +136,11 @@ export const CENARIOS: Cenario[] = [
   { id: 'H03', grupo: 'retomada do orçamento', titulo: 'responde com os dados de uma vez', pre: ['queria um orçamento', '@followup'], turnos: ['sim! 2028, sábado, 150 pessoas'] },
   { id: 'H04', grupo: 'retomada do orçamento', titulo: 'pede para voltar depois', pre: ['queria um orçamento', '@followup'], turnos: ['agora não consigo, depois eu volto'] },
   { id: 'H05', grupo: 'retomada do orçamento', titulo: 'pergunta de hospedagem em vez de responder', pre: ['queria um orçamento', '@followup'], turnos: ['vocês têm hospedagem?'] },
+
+  // ---------- Conversa real da Raquel (16/10, 14:28 a 14:31), em áudio transcrito ----------
+  { id: 'R01', grupo: 'conversa real 16/10', titulo: 'faixa de convidados + sábado no mesmo áudio', pre: ['Oi tudo bem Eu queria um orçamento pro meu casamento', 'Olha, eu ainda não sei exatamente, mas acho que vai ser lá por 2028 ou 2029.'], turnos: ['Ai olha, eu também não sei direito a lista de convidados, mas acredito que 100, 150, algo assim. E acho que eu quero que seja num sábado.'] },
+  { id: 'R02', grupo: 'conversa real 16/10', titulo: 'depois da proposta de 2028, "e para 2029?"', pre: ['queria um orçamento', 'sábado, 150 pessoas, 2028'], turnos: ['E para 2029?'] },
+  { id: 'R03', grupo: 'conversa real 16/10', titulo: 'faixa "de 100 a 150" depois de perguntar convidados', pre: ['queria um orçamento', '2028, sábado'], turnos: ['de 100 a 150'] },
+  { id: 'R04', grupo: 'conversa real 16/10', titulo: 'faixa "uns 80 ou 90"', pre: ['queria um orçamento', '2028, sábado'], turnos: ['uns 80 ou 90 convidados'] },
+  { id: 'R05', grupo: 'conversa real 16/10', titulo: 'faixa dentro de frase com data', pre: ['queria um orçamento'], turnos: ['dia 15/05/2028, entre 120 e 150 pessoas'] },
 ];

@@ -9,6 +9,7 @@ export const GEMINI_TENTATIVAS = 3;
 /**
  * Tenta de novo em 408, 429, 500, 502, 503, 504 e em timeout. `timeoutMs` vale por chamada: o pior
  * caso de um pedido é `timeoutMs * GEMINI_TENTATIVAS + 3 s`, e o turno todo tem 60 s (maxDuration).
+ * Em 16/10 um turno levou 40 s com o NLU pendurado duas vezes em 15 s; a Raquel esperou, por isso 10 s.
  */
 export function criarClienteGemini(apiKey: string, timeoutMs: number): GoogleGenAI {
   return new GoogleGenAI({
